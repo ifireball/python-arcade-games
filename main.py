@@ -8,11 +8,23 @@ SCREEN_TITLE = "Platformer"
 
 CHARACTER_SCALING = 1.0
 TILE_SCALING = 0.5
+COIN_SCALING = 0.5
+TILE_PIXEL_SIZE = 128
+GRID_PIXEL_SIZE = TILE_PIXEL_SIZE * TILE_SCALING
 
+PLAYER_START_X = 64
+PLAYER_START_Y = 255
 PLAYER_MOVEMENT_SPEED = 5
 PLAYER_JUMP_SPEED = 20
 GRAVITY = 1.0
-COIN_SCALING = 0.5
+
+LAYER_NAME_PLATFORMS = "Platforms"
+LAYER_NAME_COINS = "Coins"
+LAYER_NAME_FOREGROUND = "Foreground"
+LAYER_NAME_BACKGROUND = "Background"
+LAYER_NAME_DONT_TOUCH = "Don't Touch"
+
+AMOUNT_OF_LEVELS = 2
 
 
 class MyGame(arcade.Window):
@@ -26,6 +38,7 @@ class MyGame(arcade.Window):
         arcade.set_background_color(arcade.csscolor.CORNFLOWER_BLUE)
 
         self.tile_map: Optional[arcade.TileMap] = None
+        self.end_of_map: int = 0
         self.scene: Optional[arcade.Scene] = None
         self.player_sprite: Optional[arcade.Sprite] = None
         self.physics_engine: Optional[arcade.PhysicsEnginePlatformer] = None
@@ -35,31 +48,38 @@ class MyGame(arcade.Window):
 
         self.collect_coin_sound = arcade.load_sound(":resources:sounds/coin1.wav")
         self.jump_sound = arcade.load_sound(":resources:sounds/jump1.wav")
+        self.game_over = arcade.load_sound(":resources:sounds/gameover1.wav")
 
         self.score: int = 0
+        self.level: int = 1
 
     def setup(self):
         """Setup the game"""
         self.camera = arcade.Camera(self.width, self.height)
         self.gui_camera = arcade.Camera(self.width, self.height)
 
-        map_name = ":resources:tiled_maps/map.json"
-        layer_options = {"Platforms": {"use_spatial_hash": True}}
+        map_name = f":resources:tiled_maps/map2_level_{self.level}.json"
+        layer_options = {
+            LAYER_NAME_PLATFORMS: {"use_spatial_hash": True},
+            LAYER_NAME_COINS: {"use_spatial_hash": True},
+            LAYER_NAME_DONT_TOUCH: {"use_spatial_hash": True},
+        }
         self.tile_map = arcade.TileMap(map_name, TILE_SCALING, layer_options)
         self.scene = arcade.Scene.from_tilemap(self.tile_map)
 
         if self.tile_map.tiled_map.background_color:
             arcade.set_background_color(self.tile_map.tiled_map.background_color)
+        self.end_of_map = self.tile_map.tiled_map.map_size.width * GRID_PIXEL_SIZE
 
-        self.scene.add_sprite_list("Player")
+        self.scene.add_sprite_list_before("Player", LAYER_NAME_FOREGROUND)
         image_source = ":resources:images/animated_characters/female_adventurer/femaleAdventurer_idle.png"
         self.player_sprite = arcade.Sprite(image_source, CHARACTER_SCALING)
-        self.player_sprite.center_x = 64
-        self.player_sprite.center_y = 128
+        self.player_sprite.center_x = PLAYER_START_X
+        self.player_sprite.center_y = PLAYER_START_Y
         self.scene.add_sprite("Player", self.player_sprite)
 
         self.physics_engine = arcade.PhysicsEnginePlatformer(
-            self.player_sprite, self.scene.get_sprite_list("Platforms"), GRAVITY
+            self.player_sprite, self.scene.get_sprite_list(LAYER_NAME_PLATFORMS), GRAVITY
         )
 
         self.score = 0
@@ -99,20 +119,45 @@ class MyGame(arcade.Window):
             self.player_sprite.change_x = 0
 
     def center_camera_to_player(self):
-
-        screen_x = max(self.player_sprite.center_x - self.camera.viewport_width // 2, 0)
+        screen_x = self.player_sprite.center_x - self.camera.viewport_width // 2
+        screen_x = min(max(screen_x, 0), self.end_of_map - self.camera.viewport_width)
         screen_y = max(self.player_sprite.center_y - self.camera.viewport_width // 2, 0)
         self.camera.move_to((screen_x, screen_y))
 
+
+    def player_die(self):
+        self.player_sprite.change_x = 0
+        self.player_sprite.change_y = 0
+        self.player_sprite.center_x = PLAYER_START_X
+        self.player_sprite.center_y = PLAYER_START_Y
+        arcade.play_sound(self.game_over)
+
+    def next_level(self):
+        self.level = self.level % AMOUNT_OF_LEVELS + 1
+        self.setup()
+
     def on_update(self, delta_time: float):
         self.physics_engine.update()
-        self.center_camera_to_player()
 
-        coin_hit_list = arcade.check_for_collision_with_list(self.player_sprite, self.scene.get_sprite_list("Coins"))
+        coin_hit_list = \
+            arcade.check_for_collision_with_list(self.player_sprite, self.scene.get_sprite_list(LAYER_NAME_COINS))
         for coin in coin_hit_list:
             coin.remove_from_sprite_lists()
             self.score += 1
             arcade.play_sound(self.collect_coin_sound)
+
+        if self.player_sprite.center_y < -100:
+            self.player_die()
+        if arcade.check_for_collision_with_list(self.player_sprite, self.scene.get_sprite_list(LAYER_NAME_DONT_TOUCH)):
+            self.player_die()
+
+        self.player_sprite.left = max(self.player_sprite.left, 0)
+        self.player_sprite.right = min(self.player_sprite.right, self.end_of_map)
+
+        if self.player_sprite.right >= self.end_of_map:
+            self.next_level()
+
+        self.center_camera_to_player()
 
 
 def main():
