@@ -120,8 +120,8 @@ class MyGame(arcade.Window):
 
     def center_camera_to_player(self):
         screen_x = self.player_sprite.center_x - self.camera.viewport_width // 2
-        screen_x = min(max(screen_x, 0), self.end_of_map - self.camera.viewport_width)
-        screen_y = max(self.player_sprite.center_y - self.camera.viewport_width // 2, 0)
+        screen_x = arcade.clamp(screen_x, 0, self.end_of_map - self.camera.viewport_width)
+        screen_y = max(self.player_sprite.center_y - self.camera.viewport_height // 2, 0)
         self.camera.move_to((screen_x, screen_y))
 
 
