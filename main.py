@@ -1,26 +1,28 @@
 from __future__ import annotations
 
 from colorsys import rgb_to_hls
+from dataclasses import dataclass
 from enum import IntEnum, auto
 from typing import NamedTuple, Optional
 
 import arcade
 
-SCREEN_WIDTH = 1000
-SCREEN_HEIGHT = 650
+VIEWPORT_WIDTH = 1000
+VIEWPORT_HEIGHT = 650
 SCREEN_TITLE = "Platformer"
 
-CHARACTER_SCALING = 1.0
-TILE_SCALING = 0.5
-COIN_SCALING = 0.5
+GAME_SCALE = 1.5
+CHARACTER_SCALING = 1.0 * GAME_SCALE
+TILE_SCALING = 0.5 * GAME_SCALE
+COIN_SCALING = 0.5 * GAME_SCALE
 TILE_PIXEL_SIZE = 128
 GRID_PIXEL_SIZE = TILE_PIXEL_SIZE * TILE_SCALING
 
-PLAYER_START_X = 64
-PLAYER_START_Y = 255
-PLAYER_MOVEMENT_SPEED = 5
-PLAYER_JUMP_SPEED = 20
-GRAVITY = 1.0
+PLAYER_START_X = 64 * GAME_SCALE
+PLAYER_START_Y = 255 * GAME_SCALE
+PLAYER_MOVEMENT_SPEED = 5 * GAME_SCALE
+PLAYER_JUMP_SPEED = 20 * GAME_SCALE
+GRAVITY = 1.0 * GAME_SCALE
 
 LAYER_NAME_MOVING_PLATFORMS = "Moving Platforms"
 LAYER_NAME_PLATFORMS = "Platforms"
@@ -30,6 +32,9 @@ LAYER_NAME_BACKGROUND = "Background"
 LAYER_NAME_DONT_TOUCH = "Don't Touch"
 LAYER_NAME_LADDERS = "Ladders"
 LAYER_NAME_PLAYER = "Player"
+MOVING_PLATFORM_PROPERTIES = (
+    'change_x', 'change_y', 'boundary_top', 'boundary_left', 'boundary_right', 'boundary_bottom'
+)
 
 LEVEL_MAPS = (
     ":resources:tiled_maps/map2_level_1.json",
@@ -42,6 +47,10 @@ KEYS_UP = {arcade.key.UP, arcade.key.W, arcade.key.SPACE}
 KEYS_DOWN = {arcade.key.DOWN, arcade.key.S}
 KEYS_LEFT = {arcade.key.LEFT, arcade.key.A}
 KEYS_RIGHT = {arcade.key.RIGHT, arcade.key.D}
+
+KEYS_NEXT_LEVEL = {arcade.key.N}
+KEYS_FULL_SCREEN = {arcade.key.F, arcade.key.F11}
+KEYS_DEBUG_DISPLAY = {arcade.key.P}
 
 
 class Direction(IntEnum):
@@ -137,13 +146,18 @@ class PlayerCharacter(arcade.Sprite):
         self.update_texture()
 
 
+@dataclass
+class GameSettings:
+    debug_display: bool = False
+
+
 class MyGame(arcade.Window):
     """
     Main application class
     """
 
     def __init__(self):
-        super().__init__(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_TITLE)
+        super().__init__(VIEWPORT_WIDTH, VIEWPORT_HEIGHT, SCREEN_TITLE, resizable=True)
 
         self.text_color: arcade.Color = arcade.csscolor.WHITE
 
@@ -162,6 +176,8 @@ class MyGame(arcade.Window):
 
         self.score: int = 0
         self.level: int = 0
+
+        self.game_settings = GameSettings()
 
     def setup(self):
         """Setup the game"""
@@ -195,6 +211,13 @@ class MyGame(arcade.Window):
         self.player_sprite.center_y = PLAYER_START_Y
         self.scene.add_sprite(LAYER_NAME_PLAYER, self.player_sprite)
 
+        # if LAYER_NAME_MOVING_PLATFORMS in self.scene.
+        for platform in self.scene.name_mapping.get(LAYER_NAME_MOVING_PLATFORMS, []):
+            for prop_name in MOVING_PLATFORM_PROPERTIES:
+                if prop_name in platform.properties:
+                    platform.properties[prop_name] = int(platform.properties[prop_name]) * GAME_SCALE
+                if (attr_value := getattr(platform, prop_name)) is not None:
+                    setattr(platform, prop_name, attr_value * GAME_SCALE)
         platforms = [
             self.scene.get_sprite_list(key)
             for key in (LAYER_NAME_PLATFORMS, LAYER_NAME_MOVING_PLATFORMS)
@@ -211,6 +234,13 @@ class MyGame(arcade.Window):
 
         self.score = 0
 
+    def on_resize(self, width: float, height: float):
+        super().on_resize(width, height)
+
+        self.gui_camera.resize(width, height)
+        self.camera.resize(width, height)
+
+
     def on_draw(self):
         """Render the screen"""
         arcade.start_render()
@@ -219,11 +249,19 @@ class MyGame(arcade.Window):
         self.scene.draw()
 
         self.gui_camera.use()
-        score_text = f"Score: {self.score}"
+        hud_text = f"Score: {self.score}"
         arcade.draw_text(
-            score_text, 20, self.gui_camera.viewport_height - 20, self.text_color, 18,
+            hud_text, 20, self.gui_camera.viewport_height - 20, self.text_color, 18,
             anchor_y="top"
         )
+        if self.game_settings.debug_display:
+            hud_text = f" POS: ({self.player_sprite.center_x}, {self.player_sprite.bottom})"
+            arcade.draw_text(
+                hud_text, self.gui_camera.viewport_width - 20, self.gui_camera.viewport_height - 20, self.text_color,
+                12,
+                anchor_x="right", anchor_y="top"
+            )
+
 
     def on_key_press(self, key: int, modifiers: int):
         if key in KEYS_UP:
@@ -246,6 +284,12 @@ class MyGame(arcade.Window):
                 self.player_sprite.change_y = 0
         elif key in KEYS_LEFT | KEYS_RIGHT:
             self.player_sprite.change_x = 0
+        elif key in KEYS_NEXT_LEVEL:
+            self.next_level()
+        elif key in KEYS_DEBUG_DISPLAY:
+            self.game_settings.debug_display = not self.game_settings.debug_display
+        elif key in KEYS_FULL_SCREEN:
+            self.set_fullscreen(not self.fullscreen)
 
     def center_camera_to_player(self):
         screen_x = self.player_sprite.center_x - self.camera.viewport_width // 2
