@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+from collections import deque
 from colorsys import rgb_to_hls
 from dataclasses import dataclass
 from enum import IntEnum, auto
 from typing import NamedTuple, Optional
 
 import arcade
+
+from debug_utils import get_key_name
 
 VIEWPORT_WIDTH = 1000
 VIEWPORT_HEIGHT = 650
@@ -23,6 +26,8 @@ PLAYER_START_Y = 255 * GAME_SCALE
 PLAYER_MOVEMENT_SPEED = 5 * GAME_SCALE
 PLAYER_JUMP_SPEED = 20 * GAME_SCALE
 GRAVITY = 1.0 * GAME_SCALE
+
+INSTRUCTION_BAR_SIZE = GRID_PIXEL_SIZE
 
 LAYER_NAME_MOVING_PLATFORMS = "Moving Platforms"
 LAYER_NAME_PLATFORMS = "Platforms"
@@ -43,10 +48,10 @@ LEVEL_MAPS = (
 )
 AMOUNT_OF_LEVELS = len(LEVEL_MAPS)
 
-KEYS_UP = {arcade.key.UP, arcade.key.W, arcade.key.SPACE}
-KEYS_DOWN = {arcade.key.DOWN, arcade.key.S}
-KEYS_LEFT = {arcade.key.LEFT, arcade.key.A}
-KEYS_RIGHT = {arcade.key.RIGHT, arcade.key.D}
+KEYS_UP = {arcade.key.UP, arcade.key.S, arcade.key.SPACE}
+KEYS_DOWN = {arcade.key.DOWN, arcade.key.G}
+KEYS_LEFT = {arcade.key.LEFT, arcade.key.K}
+KEYS_RIGHT = {arcade.key.RIGHT, arcade.key.APOSTROPHE}
 
 KEYS_NEXT_LEVEL = {arcade.key.N}
 KEYS_FULL_SCREEN = {arcade.key.F, arcade.key.F11}
@@ -178,6 +183,23 @@ class MyGame(arcade.Window):
         self.level: int = 0
 
         self.game_settings = GameSettings()
+        self.debug_key_buf: Optional[deque] = None
+
+        self.instruction_bar = arcade.SpriteList(use_spatial_hash=True)
+        sprites_loc = ":resources:onscreen_controls/shaded_light/"
+        for idx, (direction, color) in enumerate(zip(
+                ("up", "down", "left", "right"),
+                (arcade.csscolor.BLUE, arcade.csscolor.YELLOW, arcade.csscolor.RED, arcade.csscolor.GREEN),
+        )):
+            button = arcade.Sprite(f"{sprites_loc}{direction}.png")
+            button.color = color
+            self.instruction_bar.append(button)
+        self.position_instructions()
+
+    def position_instructions(self):
+        for idx, button in enumerate(self.instruction_bar):
+            button.center_x = self.width * (idx+1) / 5
+            button.center_y = INSTRUCTION_BAR_SIZE / 2
 
     def setup(self):
         """Setup the game"""
@@ -239,7 +261,7 @@ class MyGame(arcade.Window):
 
         self.gui_camera.resize(width, height)
         self.camera.resize(width, height)
-
+        self.position_instructions()
 
     def on_draw(self):
         """Render the screen"""
@@ -254,12 +276,20 @@ class MyGame(arcade.Window):
             hud_text, 20, self.gui_camera.viewport_height - 20, self.text_color, 18,
             anchor_y="top"
         )
+
+        self.instruction_bar.draw()
+
         if self.game_settings.debug_display:
-            hud_text = f" POS: ({self.player_sprite.center_x}, {self.player_sprite.bottom})"
+            hud_text_lines = [f"POS: ({self.player_sprite.center_x}, {self.player_sprite.bottom})"]
+            if not self.debug_key_buf:
+                self.debug_key_buf = deque(maxlen=4)
+            hud_text_lines.append("Recent pressed key codes:")
+            hud_text_lines += [f"  {key} ({get_key_name(key)})" for key in self.debug_key_buf]
+            hud_text = "\n".join(hud_text_lines)
             arcade.draw_text(
                 hud_text, self.gui_camera.viewport_width - 20, self.gui_camera.viewport_height - 20, self.text_color,
                 12,
-                anchor_x="right", anchor_y="top"
+                width=300, anchor_x="right", anchor_y="top", multiline=True,
             )
 
 
@@ -279,6 +309,13 @@ class MyGame(arcade.Window):
             self.player_sprite.change_x = PLAYER_MOVEMENT_SPEED
 
     def on_key_release(self, key: int, modifiers: int):
+        if self.game_settings.debug_display:
+            if not self.debug_key_buf:
+                self.debug_key_buf = deque(maxlen=4)
+            self.debug_key_buf.append(key)
+        else:
+            self.debug_key_buf = None
+
         if key in KEYS_UP | KEYS_DOWN:
             if self.physics_engine.is_on_ladder():
                 self.player_sprite.change_y = 0
@@ -294,7 +331,10 @@ class MyGame(arcade.Window):
     def center_camera_to_player(self):
         screen_x = self.player_sprite.center_x - self.camera.viewport_width // 2
         screen_x = arcade.clamp(screen_x, 0, self.end_of_map - self.camera.viewport_width)
-        screen_y = max(self.player_sprite.center_y - self.camera.viewport_height // 2, 0)
+        screen_y = max(
+            self.player_sprite.center_y - self.camera.viewport_height // 2 - INSTRUCTION_BAR_SIZE,
+            -INSTRUCTION_BAR_SIZE
+        )
         self.camera.move_to((screen_x, screen_y))
 
 
