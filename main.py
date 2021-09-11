@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from colorsys import rgb_to_hls
 from enum import IntEnum, auto
 from typing import NamedTuple, Optional
 
@@ -31,8 +32,8 @@ LAYER_NAME_LADDERS = "Ladders"
 LAYER_NAME_PLAYER = "Player"
 
 LEVEL_MAPS = (
-    # ":resources:tiled_maps/map2_level_1.json",
-    # ":resources:tiled_maps/map2_level_2.json",
+    ":resources:tiled_maps/map2_level_1.json",
+    ":resources:tiled_maps/map2_level_2.json",
     ":resources:tiled_maps/map_with_ladders.json",
 )
 AMOUNT_OF_LEVELS = len(LEVEL_MAPS)
@@ -144,7 +145,7 @@ class MyGame(arcade.Window):
     def __init__(self):
         super().__init__(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_TITLE)
 
-        arcade.set_background_color(arcade.csscolor.CORNFLOWER_BLUE)
+        self.text_color: arcade.Color = arcade.csscolor.WHITE
 
         self.tile_map: Optional[arcade.TileMap] = None
         self.end_of_map: int = 0
@@ -177,7 +178,14 @@ class MyGame(arcade.Window):
         self.scene = arcade.Scene.from_tilemap(self.tile_map)
 
         if self.tile_map.tiled_map.background_color:
-            arcade.set_background_color(self.tile_map.tiled_map.background_color)
+            self.background_color = self.tile_map.tiled_map.background_color
+        else:
+            self.background_color = arcade.csscolor.CORNFLOWER_BLUE
+        arcade.set_background_color(self.background_color)
+        if rgb_to_hls(*arcade.get_three_float_color(self.background_color))[1] > 0.5:
+            self.text_color = arcade.csscolor.BLACK
+        else:
+            self.text_color = arcade.csscolor.WHITE
         self.end_of_map = self.tile_map.tiled_map.map_size.width * GRID_PIXEL_SIZE
 
         if LAYER_NAME_FOREGROUND in self.scene.name_mapping:
@@ -213,7 +221,7 @@ class MyGame(arcade.Window):
         self.gui_camera.use()
         score_text = f"Score: {self.score}"
         arcade.draw_text(
-            score_text, 20, self.gui_camera.viewport_height - 20, arcade.csscolor.WHITE, 18,
+            score_text, 20, self.gui_camera.viewport_height - 20, self.text_color, 18,
             anchor_y="top"
         )
 
