@@ -21,6 +21,9 @@ COIN_SCALING = 0.5 * GAME_SCALE
 TILE_PIXEL_SIZE = 128
 GRID_PIXEL_SIZE = TILE_PIXEL_SIZE * TILE_SCALING
 
+SPRITE_ANIMATION_FRAME_RATE=20.0
+SPRITE_ANIMATION_FRAME_DURATION = 1.0 / SPRITE_ANIMATION_FRAME_RATE
+
 PLAYER_START_X = 64 * GAME_SCALE
 PLAYER_START_Y = 255 * GAME_SCALE
 PLAYER_MOVEMENT_SPEED = 5 * GAME_SCALE
@@ -101,18 +104,22 @@ class PlayerCharacter(arcade.Sprite):
         self.player_mode: PlayerMode = PlayerMode.IDLE
         self.reset_frames = False
         self.progress_frames = False
+        self.frame_time_counter: float = 0.0
         self.update_texture()
 
         self.is_on_ladder = False
 
-    def update_texture(self):
+    def update_texture(self, delta_time: float = 0):
         current_texture_set = self.mode_textures[self.player_mode]
         if self.reset_frames:
             self.cur_texture_frame = 0
             self.reset_frames = False
         elif self.progress_frames:
-            self.cur_texture_frame = (self.cur_texture_frame + 1) % len(current_texture_set)
-            self.progress_frames = False
+            self.frame_time_counter += delta_time
+            if self.frame_time_counter >= SPRITE_ANIMATION_FRAME_DURATION:
+                self.cur_texture_frame = (self.cur_texture_frame + 1) % len(current_texture_set)
+                self.progress_frames = False
+                self.frame_time_counter = 0.0
         self.texture = current_texture_set[self.cur_texture_frame][self.character_face_direction]
 
     def update_player_direction(self):
@@ -148,7 +155,7 @@ class PlayerCharacter(arcade.Sprite):
     def update_animation(self, delta_time: float = 1 / 60):
         self.update_player_direction()
         self.update_player_mode()
-        self.update_texture()
+        self.update_texture(delta_time)
 
 
 @dataclass
