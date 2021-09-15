@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from collections import deque
+from collections import Sequence, deque
 from colorsys import rgb_to_hls
 from dataclasses import dataclass
 from enum import IntEnum, auto
-from typing import NamedTuple, Optional
+from itertools import chain
+from typing import Iterable, List, NamedTuple, Optional, Tuple
 
 import arcade
 
@@ -20,9 +21,6 @@ TILE_SCALING = 0.5 * GAME_SCALE
 COIN_SCALING = 0.5 * GAME_SCALE
 TILE_PIXEL_SIZE = 128
 GRID_PIXEL_SIZE = TILE_PIXEL_SIZE * TILE_SCALING
-
-SPRITE_ANIMATION_FRAME_RATE=20.0
-SPRITE_ANIMATION_FRAME_DURATION = 1.0 / SPRITE_ANIMATION_FRAME_RATE
 
 PLAYER_START_X = 64 * GAME_SCALE
 PLAYER_START_Y = 255 * GAME_SCALE
@@ -86,17 +84,36 @@ class TexturePair(NamedTuple):
         )
 
 
+@dataclass(frozen=True)
+class TextureAnimSet(Sequence):
+    frames: Tuple[TexturePair]
+    duration: float
+
+    @classmethod
+    def load(cls, filename: str, *more_files: str, duration=0.0):
+        return TextureAnimSet(
+            frames=tuple(TexturePair.load(fn) for fn in chain([filename], more_files)),
+            duration=duration,
+        )
+
+    def __getitem__(self, item):
+        return self.frames[item]
+
+    def __len__(self):
+        return len(self.frames)
+
+
 class PlayerCharacter(arcade.Sprite):
     def __init__(self):
         super(PlayerCharacter, self).__init__(scale=CHARACTER_SCALING)
 
         main_path = ":resources:images/animated_characters/female_adventurer/femaleAdventurer"
         self.mode_textures = {
-            PlayerMode.IDLE: [TexturePair.load(f"{main_path}_idle.png")],
-            PlayerMode.JUMPING: [TexturePair.load(f"{main_path}_jump.png")],
-            PlayerMode.FALLING: [TexturePair.load(f"{main_path}_fall.png")],
-            PlayerMode.WALKING: [TexturePair.load(f"{main_path}_walk{i}.png") for i in range(0, 8)],
-            PlayerMode.CLIMBING: [TexturePair.load(f"{main_path}_climb{i}.png") for i in range(0, 2)],
+            PlayerMode.IDLE: TextureAnimSet.load(f"{main_path}_idle.png"),
+            PlayerMode.JUMPING: TextureAnimSet.load(f"{main_path}_jump.png"),
+            PlayerMode.FALLING: TextureAnimSet.load(f"{main_path}_fall.png"),
+            PlayerMode.WALKING: TextureAnimSet.load(*(f"{main_path}_walk{i}.png" for i in range(0, 8)), duration=2/5),
+            PlayerMode.CLIMBING: TextureAnimSet.load(*(f"{main_path}_climb{i}.png" for i in range(0, 2)), duration=1/5),
         }
 
         self.character_face_direction: Direction = Direction.RIGHT
@@ -113,13 +130,13 @@ class PlayerCharacter(arcade.Sprite):
         current_texture_set = self.mode_textures[self.player_mode]
         if self.reset_frames:
             self.cur_texture_frame = 0
+            self.frame_time_counter = 0.0
             self.reset_frames = False
         elif self.progress_frames:
-            self.frame_time_counter += delta_time
-            if self.frame_time_counter >= SPRITE_ANIMATION_FRAME_DURATION:
-                self.cur_texture_frame = (self.cur_texture_frame + 1) % len(current_texture_set)
-                self.progress_frames = False
-                self.frame_time_counter = 0.0
+            self.frame_time_counter = (self.frame_time_counter + delta_time) % current_texture_set.duration
+            self.cur_texture_frame = \
+                int(len(current_texture_set) * self.frame_time_counter / current_texture_set.duration)
+            self.progress_frames = False
         self.texture = current_texture_set[self.cur_texture_frame][self.character_face_direction]
 
     def update_player_direction(self):
