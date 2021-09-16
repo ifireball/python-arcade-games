@@ -1,412 +1,150 @@
-from __future__ import annotations
+from pathlib import Path
+from typing import Optional
 
-from collections import Sequence, deque
-from colorsys import rgb_to_hls
-from dataclasses import dataclass
-from enum import IntEnum, auto
-from itertools import chain
-from typing import Iterable, List, NamedTuple, Optional, Tuple
+import pygame
+import pyscroll.data
+import pytmx
+from pygame.transform import scale
 
-import arcade
-
-from debug_utils import get_key_name
-
-VIEWPORT_WIDTH = 1000
-VIEWPORT_HEIGHT = 650
-SCREEN_TITLE = "Platformer"
-
-GAME_SCALE = 1.5
-CHARACTER_SCALING = 1.0 * GAME_SCALE
-TILE_SCALING = 0.5 * GAME_SCALE
-COIN_SCALING = 0.5 * GAME_SCALE
-TILE_PIXEL_SIZE = 128
-GRID_PIXEL_SIZE = TILE_PIXEL_SIZE * TILE_SCALING
-
-PLAYER_START_X = 64 * GAME_SCALE
-PLAYER_START_Y = 255 * GAME_SCALE
-PLAYER_MOVEMENT_SPEED = 5 * GAME_SCALE
-PLAYER_JUMP_SPEED = 20 * GAME_SCALE
-GRAVITY = 1.0 * GAME_SCALE
-
-INSTRUCTION_BAR_SIZE = GRID_PIXEL_SIZE
-
-LAYER_NAME_MOVING_PLATFORMS = "Moving Platforms"
-LAYER_NAME_PLATFORMS = "Platforms"
-LAYER_NAME_COINS = "Coins"
-LAYER_NAME_FOREGROUND = "Foreground"
-LAYER_NAME_BACKGROUND = "Background"
-LAYER_NAME_DONT_TOUCH = "Don't Touch"
-LAYER_NAME_LADDERS = "Ladders"
-LAYER_NAME_PLAYER = "Player"
-MOVING_PLATFORM_PROPERTIES = (
-    'change_x', 'change_y', 'boundary_top', 'boundary_left', 'boundary_right', 'boundary_bottom'
-)
-
-LEVEL_MAPS = (
-    ":resources:tiled_maps/map2_level_1.json",
-    ":resources:tiled_maps/map2_level_2.json",
-    ":resources:tiled_maps/map_with_ladders.json",
-)
-AMOUNT_OF_LEVELS = len(LEVEL_MAPS)
-
-KEYS_UP = {arcade.key.UP, arcade.key.S, arcade.key.SPACE}
-KEYS_DOWN = {arcade.key.DOWN, arcade.key.G}
-KEYS_LEFT = {arcade.key.LEFT, arcade.key.K}
-KEYS_RIGHT = {arcade.key.RIGHT, arcade.key.APOSTROPHE}
-
-KEYS_NEXT_LEVEL = {arcade.key.N}
-KEYS_FULL_SCREEN = {arcade.key.F, arcade.key.F11}
-KEYS_DEBUG_DISPLAY = {arcade.key.P}
+HERO_MOVE_SPEED = 200.0
 
 
-class Direction(IntEnum):
-    RIGHT=0
-    LEFT=1
+temp_surface: Optional[pygame.Surface] = None
+screen: Optional[pygame.Surface] = None
 
 
-class PlayerMode(IntEnum):
-    IDLE = auto()
-    WALKING = auto()
-    JUMPING = auto()
-    FALLING = auto()
-    CLIMBING = auto()
+def load_image(filename: str) -> pygame.Surface:
+    filepath = Path(__file__).parent / 'resources' / filename
+    return pygame.image.load(filepath)
 
 
-class TexturePair(NamedTuple):
-    right_facing: arcade.Texture
-    left_facing: arcade.Texture
-
-    @classmethod
-    def load(cls, filename: str) -> TexturePair:
-        return TexturePair(
-            right_facing=arcade.load_texture(filename),
-            left_facing=arcade.load_texture(filename, flipped_horizontally=True),
-        )
+def load_map(filename: str) -> pytmx.TiledMap:
+    filepath = Path(__file__).parent / 'resources' / filename
+    return pytmx.load_pygame(filepath)
 
 
-@dataclass(frozen=True)
-class TextureAnimSet(Sequence):
-    frames: Tuple[TexturePair]
-    duration: float
+class Hero(pygame.sprite.Sprite):
+    def __init__(self) -> None:
+        super().__init__()
+        self.image = load_image('hero.png').convert_alpha()
+        self.velocity = [0.0, 0.0]
+        self._position = [0.0, 0.0]
+        self._old_position = [0.0, 0.0]
+        self.rect = self.image.get_rect()
+        self.feet = pygame.rect.Rect(0.0, 0.0, self.rect.width * 0.5, 8.0)
 
-    @classmethod
-    def load(cls, filename: str, *more_files: str, duration=0.0):
-        return TextureAnimSet(
-            frames=tuple(TexturePair.load(fn) for fn in chain([filename], more_files)),
-            duration=duration,
-        )
+    @property
+    def position(self) -> list[float]:
+        return list(self._position)
 
-    def __getitem__(self, item):
-        return self.frames[item]
+    @position.setter
+    def position(self, value: list[float]) -> None:
+        self._position = list(value)
 
-    def __len__(self):
-        return len(self.frames)
+    def update(self, dt: float) -> None:
+        self._old_position = self._position[:]
+        self._position[0] += self.velocity[0] * dt
+        self._position[1] += self.velocity[1] * dt
+        self.rect.topleft = self._position
+        self.feet.midbottom = self.rect.midbottom
+
+    def move_back(self, dt: float) -> None:
+        """Called after update() to cancel motion"""
+        self._position = self._old_position
+        self.rect.topleft = self._position
+        self.feet.midbottom = self.rect.midbottom
 
 
-class PlayerCharacter(arcade.Sprite):
-    def __init__(self):
-        super(PlayerCharacter, self).__init__(scale=CHARACTER_SCALING)
+class QuestGame:
+    def __init__(self) -> None:
+        self.running: bool = False
 
-        main_path = ":resources:images/animated_characters/female_adventurer/femaleAdventurer"
-        self.mode_textures = {
-            PlayerMode.IDLE: TextureAnimSet.load(f"{main_path}_idle.png"),
-            PlayerMode.JUMPING: TextureAnimSet.load(f"{main_path}_jump.png"),
-            PlayerMode.FALLING: TextureAnimSet.load(f"{main_path}_fall.png"),
-            PlayerMode.WALKING: TextureAnimSet.load(*(f"{main_path}_walk{i}.png" for i in range(0, 8)), duration=2/5),
-            PlayerMode.CLIMBING: TextureAnimSet.load(*(f"{main_path}_climb{i}.png" for i in range(0, 2)), duration=1/5),
-        }
+        tmx_data = load_map("grasslands.tmx")
+        map_data = pyscroll.data.TiledMapData(tmx_data)
 
-        self.character_face_direction: Direction = Direction.RIGHT
-        self.cur_texture_frame = 0
-        self.player_mode: PlayerMode = PlayerMode.IDLE
-        self.reset_frames = False
-        self.progress_frames = False
-        self.frame_time_counter: float = 0.0
-        self.update_texture()
+        w, h = screen.get_size()
 
-        self.is_on_ladder = False
+        self.map_layer = pyscroll.BufferedRenderer(map_data, (w // 2, h // 2), clamp_camera=True)
+        self.group = pyscroll.PyscrollGroup(map_layer=self.map_layer)
 
-    def update_texture(self, delta_time: float = 0):
-        current_texture_set = self.mode_textures[self.player_mode]
-        if self.reset_frames:
-            self.cur_texture_frame = 0
-            self.frame_time_counter = 0.0
-            self.reset_frames = False
-        elif self.progress_frames:
-            self.frame_time_counter = (self.frame_time_counter + delta_time) % current_texture_set.duration
-            self.cur_texture_frame = \
-                int(len(current_texture_set) * self.frame_time_counter / current_texture_set.duration)
-            self.progress_frames = False
-        self.texture = current_texture_set[self.cur_texture_frame][self.character_face_direction]
+        self.hero = Hero()
+        self.hero.position = self.map_layer.map_rect.center
+        sprites_layer = tmx_data.layernames.get("sprites")
+        hero_layer = sprites_layer.id - 1 if sprites_layer else 0
+        self.group.add(self.hero, layer=hero_layer)
 
-    def update_player_direction(self):
-        old_direction = self.character_face_direction
-        if self.change_x < 0:
-            self.character_face_direction = Direction.LEFT
-        elif self.change_x > 0:
-            self.character_face_direction = Direction.RIGHT
-        self.reset_frames = self.reset_frames or (old_direction != self.character_face_direction)
+    def draw(self, surface: pygame.Surface) -> None:
+        self.group.center(self.hero.rect.center)
+        self.group.draw(surface)
 
-    def update_player_mode(self):
-        old_mode = self.player_mode
-        if self.is_on_ladder and abs(self.change_y) > 1:
-            self.player_mode = PlayerMode.CLIMBING
-            self.progress_frames = True
-        elif self.is_on_ladder and old_mode == PlayerMode.CLIMBING:
-            self.player_mode = PlayerMode.CLIMBING
-        elif self.change_y > 0:
-            self.player_mode = PlayerMode.JUMPING
-        elif self.change_y < -10:
-            self.player_mode = PlayerMode.FALLING
-        elif self.change_y < 0 and (old_mode == PlayerMode.JUMPING or old_mode == PlayerMode.FALLING):
-            self.player_mode = PlayerMode.FALLING
-        elif self.change_y == 0 and old_mode == PlayerMode.JUMPING:
-            self.player_mode = PlayerMode.FALLING
-        elif self.change_x == 0:
-            self.player_mode = PlayerMode.IDLE
+    def handle_input(self) -> None:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                self.running = False
+                break
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    self.running = False
+                    break
+                # print(self.group.layers())
+            elif event.type == pygame.VIDEORESIZE:
+                init_screen(event.w, event.h)
+                self.map_layer.set_size((event.w // 2, event.h // 2))
+
+        pressed = pygame.key.get_pressed()
+        if pressed[pygame.K_UP]:
+            self.hero.velocity[1] = -HERO_MOVE_SPEED
+        elif pressed[pygame.K_DOWN]:
+            self.hero.velocity[1] = HERO_MOVE_SPEED
         else:
-            self.player_mode = PlayerMode.WALKING
-            self.progress_frames = True
-        self.reset_frames = self.reset_frames or (old_mode != self.player_mode)
-
-    def update_animation(self, delta_time: float = 1 / 60):
-        self.update_player_direction()
-        self.update_player_mode()
-        self.update_texture(delta_time)
-
-
-@dataclass
-class GameSettings:
-    debug_display: bool = False
-
-
-class MyGame(arcade.Window):
-    """
-    Main application class
-    """
-
-    def __init__(self):
-        super().__init__(VIEWPORT_WIDTH, VIEWPORT_HEIGHT, SCREEN_TITLE, resizable=True)
-
-        self.text_color: arcade.Color = arcade.csscolor.WHITE
-
-        self.tile_map: Optional[arcade.TileMap] = None
-        self.end_of_map: int = 0
-        self.scene: Optional[arcade.Scene] = None
-        self.player_sprite: Optional[PlayerCharacter] = None
-        self.physics_engine: Optional[arcade.PhysicsEnginePlatformer] = None
-
-        self.camera: Optional[arcade.Camera] = None
-        self.gui_camera: Optional[arcade.Camera] = None
-
-        self.collect_coin_sound = arcade.load_sound(":resources:sounds/coin1.wav")
-        self.jump_sound = arcade.load_sound(":resources:sounds/jump1.wav")
-        self.game_over = arcade.load_sound(":resources:sounds/gameover1.wav")
-
-        self.score: int = 0
-        self.level: int = 0
-
-        self.game_settings = GameSettings()
-        self.debug_key_buf: Optional[deque] = None
-
-        self.instruction_bar = arcade.SpriteList(use_spatial_hash=True)
-        sprites_loc = ":resources:onscreen_controls/shaded_light/"
-        for idx, (direction, color) in enumerate(zip(
-                ("up", "down", "left", "right"),
-                (arcade.csscolor.BLUE, arcade.csscolor.YELLOW, arcade.csscolor.RED, arcade.csscolor.GREEN),
-        )):
-            button = arcade.Sprite(f"{sprites_loc}{direction}.png")
-            button.color = color
-            self.instruction_bar.append(button)
-        self.position_instructions()
-
-    def position_instructions(self):
-        for idx, button in enumerate(self.instruction_bar):
-            button.center_x = self.width * (idx+1) / 5
-            button.center_y = INSTRUCTION_BAR_SIZE / 2
-
-    def setup(self):
-        """Setup the game"""
-        self.camera = arcade.Camera(self.width, self.height)
-        self.gui_camera = arcade.Camera(self.width, self.height)
-
-        map_name = LEVEL_MAPS[self.level]
-        layer_options = {
-            LAYER_NAME_PLATFORMS: {"use_spatial_hash": True},
-            LAYER_NAME_COINS: {"use_spatial_hash": True},
-            LAYER_NAME_DONT_TOUCH: {"use_spatial_hash": True},
-        }
-        self.tile_map = arcade.TileMap(map_name, TILE_SCALING, layer_options)
-        self.scene = arcade.Scene.from_tilemap(self.tile_map)
-
-        if self.tile_map.tiled_map.background_color:
-            self.background_color = self.tile_map.tiled_map.background_color
+            self.hero.velocity[1] = 0
+        if pressed[pygame.K_LEFT]:
+            self.hero.velocity[0] = -HERO_MOVE_SPEED
+        elif pressed[pygame.K_RIGHT]:
+            self.hero.velocity[0] = HERO_MOVE_SPEED
         else:
-            self.background_color = arcade.csscolor.CORNFLOWER_BLUE
-        arcade.set_background_color(self.background_color)
-        if rgb_to_hls(*arcade.get_three_float_color(self.background_color))[1] > 0.5:
-            self.text_color = arcade.csscolor.BLACK
-        else:
-            self.text_color = arcade.csscolor.WHITE
-        self.end_of_map = self.tile_map.tiled_map.map_size.width * GRID_PIXEL_SIZE
+            self.hero.velocity[0] = 0
 
-        if LAYER_NAME_FOREGROUND in self.scene.name_mapping:
-            self.scene.add_sprite_list_before(LAYER_NAME_PLAYER, LAYER_NAME_FOREGROUND)
-        self.player_sprite = PlayerCharacter()
-        self.player_sprite.center_x = PLAYER_START_X
-        self.player_sprite.center_y = PLAYER_START_Y
-        self.scene.add_sprite(LAYER_NAME_PLAYER, self.player_sprite)
+    def update(self, dt: float = 0) -> None:
+        self.hero.update(dt)
 
-        # if LAYER_NAME_MOVING_PLATFORMS in self.scene.
-        for platform in self.scene.name_mapping.get(LAYER_NAME_MOVING_PLATFORMS, []):
-            for prop_name in MOVING_PLATFORM_PROPERTIES:
-                if prop_name in platform.properties:
-                    platform.properties[prop_name] = int(platform.properties[prop_name]) * GAME_SCALE
-                if (attr_value := getattr(platform, prop_name)) is not None:
-                    setattr(platform, prop_name, attr_value * GAME_SCALE)
-        platforms = [
-            self.scene.get_sprite_list(key)
-            for key in (LAYER_NAME_PLATFORMS, LAYER_NAME_MOVING_PLATFORMS)
-            if key in self.scene.name_mapping
-        ]
-        ladders = [
-            self.scene.get_sprite_list(key)
-            for key in (LAYER_NAME_LADDERS,)
-            if key in self.scene.name_mapping
-        ]
-        self.physics_engine = arcade.PhysicsEnginePlatformer(
-            self.player_sprite, platforms, gravity_constant=GRAVITY, ladders=ladders
-        )
+    def run(self) -> None:
+        clock = pygame.time.Clock()
+        fps = 60
+        self.running = True
 
-        self.score = 0
-
-    def on_resize(self, width: float, height: float):
-        super().on_resize(width, height)
-
-        self.gui_camera.resize(width, height)
-        self.camera.resize(width, height)
-        self.position_instructions()
-
-    def on_draw(self):
-        """Render the screen"""
-        arcade.start_render()
-
-        self.camera.use()
-        self.scene.draw()
-
-        self.gui_camera.use()
-        hud_text = f"Score: {self.score}"
-        arcade.draw_text(
-            hud_text, 20, self.gui_camera.viewport_height - 20, self.text_color, 18,
-            anchor_y="top"
-        )
-
-        self.instruction_bar.draw()
-
-        if self.game_settings.debug_display:
-            hud_text_lines = [f"POS: ({self.player_sprite.center_x}, {self.player_sprite.bottom})"]
-            if not self.debug_key_buf:
-                self.debug_key_buf = deque(maxlen=4)
-            hud_text_lines.append("Recent pressed key codes:")
-            hud_text_lines += [f"  {key} ({get_key_name(key)})" for key in self.debug_key_buf]
-            hud_text = "\n".join(hud_text_lines)
-            arcade.draw_text(
-                hud_text, self.gui_camera.viewport_width - 20, self.gui_camera.viewport_height - 20, self.text_color,
-                12,
-                width=300, anchor_x="right", anchor_y="top", multiline=True,
-            )
+        try:
+            while self.running:
+                dt = clock.tick(fps) / 1000.0
+                self.handle_input()
+                self.update(dt)
+                self.draw(temp_surface)
+                scale(temp_surface, screen.get_size(), screen)
+                pygame.display.flip()
+        except KeyboardInterrupt:
+            self.running = False
+            pygame.exit()
 
 
-    def on_key_press(self, key: int, modifiers: int):
-        if key in KEYS_UP:
-            if self.physics_engine.is_on_ladder():
-                self.player_sprite.change_y = PLAYER_MOVEMENT_SPEED
-            elif self.physics_engine.can_jump():
-                self.player_sprite.change_y = PLAYER_JUMP_SPEED
-                arcade.play_sound(self.jump_sound)
-        elif key in KEYS_DOWN:
-            if self.physics_engine.is_on_ladder():
-                self.player_sprite.change_y = -PLAYER_MOVEMENT_SPEED
-        elif key in KEYS_LEFT:
-            self.player_sprite.change_x = -PLAYER_MOVEMENT_SPEED
-        elif key in KEYS_RIGHT:
-            self.player_sprite.change_x = PLAYER_MOVEMENT_SPEED
-
-    def on_key_release(self, key: int, modifiers: int):
-        if self.game_settings.debug_display:
-            if not self.debug_key_buf:
-                self.debug_key_buf = deque(maxlen=4)
-            self.debug_key_buf.append(key)
-        else:
-            self.debug_key_buf = None
-
-        if key in KEYS_UP | KEYS_DOWN:
-            if self.physics_engine.is_on_ladder():
-                self.player_sprite.change_y = 0
-        elif key in KEYS_LEFT | KEYS_RIGHT:
-            self.player_sprite.change_x = 0
-        elif key in KEYS_NEXT_LEVEL:
-            self.next_level()
-        elif key in KEYS_DEBUG_DISPLAY:
-            self.game_settings.debug_display = not self.game_settings.debug_display
-        elif key in KEYS_FULL_SCREEN:
-            self.set_fullscreen(not self.fullscreen)
-
-    def center_camera_to_player(self):
-        screen_x = self.player_sprite.center_x - self.camera.viewport_width // 2
-        screen_x = arcade.clamp(screen_x, 0, self.end_of_map - self.camera.viewport_width)
-        screen_y = max(
-            self.player_sprite.center_y - self.camera.viewport_height // 2 - INSTRUCTION_BAR_SIZE,
-            -INSTRUCTION_BAR_SIZE
-        )
-        self.camera.move_to((screen_x, screen_y))
+def init_screen(width: int, height: int) -> None:
+    global temp_surface, screen
+    screen = pygame.display.set_mode((width, height), pygame.RESIZABLE)
+    temp_surface = pygame.Surface((width // 2, height // 2)).convert()
 
 
-    def player_die(self):
-        self.player_sprite.change_x = 0
-        self.player_sprite.change_y = 0
-        self.player_sprite.center_x = PLAYER_START_X
-        self.player_sprite.center_y = PLAYER_START_Y
-        arcade.play_sound(self.game_over)
+def main() -> None:
+    pygame.init()
+    pygame.font.init()
+    init_screen(800, 600)
+    pygame.display.set_caption("Quest")
 
-    def next_level(self):
-        self.level = (self.level + 1) % AMOUNT_OF_LEVELS
-        self.setup()
-
-    def on_update(self, delta_time: float):
-        self.physics_engine.update()
-        self.player_sprite.is_on_ladder = self.physics_engine.is_on_ladder()
-
-        self.scene.update_animation(delta_time, [LAYER_NAME_BACKGROUND, LAYER_NAME_COINS, LAYER_NAME_PLAYER])
-
-        coin_hit_list = \
-            arcade.check_for_collision_with_list(self.player_sprite, self.scene.get_sprite_list(LAYER_NAME_COINS))
-        for coin in coin_hit_list:
-            coin.remove_from_sprite_lists()
-            self.score += int(coin.properties.get("Points", 1))
-            arcade.play_sound(self.collect_coin_sound)
-
-        if self.player_sprite.center_y < -100:
-            self.player_die()
-        if (
-                LAYER_NAME_DONT_TOUCH in self.scene.name_mapping
-                and self.player_sprite.collides_with_list(self.scene.get_sprite_list(LAYER_NAME_DONT_TOUCH))
-        ):
-            self.player_die()
-
-        self.player_sprite.left = max(self.player_sprite.left, 0)
-        self.player_sprite.right = min(self.player_sprite.right, self.end_of_map)
-
-        if self.player_sprite.right >= self.end_of_map:
-            self.next_level()
-
-        self.center_camera_to_player()
-
-
-def main():
-    window = MyGame()
-    window.setup()
-    arcade.run()
+    try:
+        game = QuestGame()
+        game.run()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        pygame.quit()
 
 
 if __name__ == '__main__':
