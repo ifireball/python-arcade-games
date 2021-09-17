@@ -8,6 +8,9 @@ from pygame.transform import scale
 
 HERO_MOVE_SPEED = 200.0
 
+MAP_SPRITES_LAYER = "sprites"
+MAP_WALLS_LAYER = "walls"
+
 
 temp_surface: Optional[pygame.Surface] = None
 screen: Optional[pygame.Surface] = None
@@ -62,14 +65,19 @@ class QuestGame:
         tmx_data = load_map("grasslands.tmx")
         map_data = pyscroll.data.TiledMapData(tmx_data)
 
-        w, h = screen.get_size()
+        self.walls = [
+            pygame.Rect(wall.x, wall.y, wall.width, wall.height)
+            for wall in tmx_data.layernames.get(MAP_WALLS_LAYER, [])
+        ]
+        self.world_rect = pygame.Rect(0, 0, tmx_data.width * tmx_data.tilewidth, tmx_data.height * tmx_data.tileheight)
 
+        w, h = screen.get_size()
         self.map_layer = pyscroll.BufferedRenderer(map_data, (w // 2, h // 2), clamp_camera=True)
         self.group = pyscroll.PyscrollGroup(map_layer=self.map_layer)
 
         self.hero = Hero()
         self.hero.position = self.map_layer.map_rect.center
-        sprites_layer = tmx_data.layernames.get("sprites")
+        sprites_layer = tmx_data.layernames.get(MAP_SPRITES_LAYER)
         hero_layer = sprites_layer.id - 1 if sprites_layer else 0
         self.group.add(self.hero, layer=hero_layer)
 
@@ -106,7 +114,13 @@ class QuestGame:
             self.hero.velocity[0] = 0
 
     def update(self, dt: float = 0) -> None:
-        self.hero.update(dt)
+        self.group.update(dt)
+        if self.hero.feet.collidelist(self.walls) >= 0:
+            self.hero.move_back(dt)
+        # print(self.hero.feet, self.world_rect)
+        if not self.world_rect.contains(self.hero.feet):
+            self.hero.move_back(dt)
+
 
     def run(self) -> None:
         clock = pygame.time.Clock()
