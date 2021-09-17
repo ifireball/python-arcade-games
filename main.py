@@ -1,19 +1,16 @@
+from __future__ import annotations
+
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Tuple
 
 import pygame
 import pyscroll.data
 import pytmx
-from pygame.transform import scale
 
 HERO_MOVE_SPEED = 200.0
 
 MAP_SPRITES_LAYER = "sprites"
 MAP_WALLS_LAYER = "walls"
-
-
-temp_surface: Optional[pygame.Surface] = None
-screen: Optional[pygame.Surface] = None
 
 
 def load_image(filename: str) -> pygame.Surface:
@@ -29,6 +26,7 @@ def load_map(filename: str) -> pytmx.TiledMap:
 class Hero(pygame.sprite.Sprite):
     def __init__(self) -> None:
         super().__init__()
+
         self.image = load_image('hero.png').convert_alpha()
         self.velocity = [0.0, 0.0]
         self._position = [0.0, 0.0]
@@ -59,8 +57,9 @@ class Hero(pygame.sprite.Sprite):
 
 
 class QuestGame:
-    def __init__(self) -> None:
+    def __init__(self, screen: Screen) -> None:
         self.running: bool = False
+        self.screen = screen
 
         tmx_data = load_map("grasslands.tmx")
         map_data = pyscroll.data.TiledMapData(tmx_data)
@@ -71,8 +70,7 @@ class QuestGame:
         ]
         self.world_rect = pygame.Rect(0, 0, tmx_data.width * tmx_data.tilewidth, tmx_data.height * tmx_data.tileheight)
 
-        w, h = screen.get_size()
-        self.map_layer = pyscroll.BufferedRenderer(map_data, (w // 2, h // 2), clamp_camera=True)
+        self.map_layer = pyscroll.BufferedRenderer(map_data, screen.surface.get_size(), clamp_camera=True)
         self.group = pyscroll.PyscrollGroup(map_layer=self.map_layer)
 
         self.hero = Hero()
@@ -94,10 +92,7 @@ class QuestGame:
                 if event.key == pygame.K_ESCAPE:
                     self.running = False
                     break
-                # print(self.group.layers())
-            elif event.type == pygame.VIDEORESIZE:
-                init_screen(event.w, event.h)
-                self.map_layer.set_size((event.w // 2, event.h // 2))
+            self.screen.handle_events(event, resize_callback=self.map_layer.set_size)
 
         pressed = pygame.key.get_pressed()
         if pressed[pygame.K_UP]:
@@ -132,28 +127,41 @@ class QuestGame:
                 dt = clock.tick(fps) / 1000.0
                 self.handle_input()
                 self.update(dt)
-                self.draw(temp_surface)
-                scale(temp_surface, screen.get_size(), screen)
-                pygame.display.flip()
+                self.draw(self.screen.surface)
+                self.screen.flip()
+
         except KeyboardInterrupt:
             self.running = False
             pygame.exit()
 
 
-def init_screen(width: int, height: int) -> None:
-    global temp_surface, screen
-    screen = pygame.display.set_mode((width, height), pygame.RESIZABLE)
-    temp_surface = pygame.Surface((width // 2, height // 2)).convert()
+class Screen:
+    def __init__(self, width: int = 512) -> None:
+        display_info = pygame.display.Info()
+        self.width, self.height = width, width * display_info.current_h // display_info.current_w
+        self.surface = pygame.display.set_mode((self.width, self.height), pygame.RESIZABLE | pygame.SCALED)
+
+    def handle_events(self, event: pygame.event.Event, resize_callback: Callable[[Tuple[int, int]], None] = None):
+        if event.type == pygame.VIDEORESIZE:
+            if resize_callback:
+                resize_callback(self.surface.get_size())
+        elif event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_f:
+                pygame.display.toggle_fullscreen()
+
+    @staticmethod
+    def flip():
+        pygame.display.flip()
 
 
 def main() -> None:
     pygame.init()
     pygame.font.init()
-    init_screen(800, 600)
+    screen = Screen()
     pygame.display.set_caption("Quest")
 
     try:
-        game = QuestGame()
+        game = QuestGame(screen)
         game.run()
     except KeyboardInterrupt:
         pass
