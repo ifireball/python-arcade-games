@@ -139,7 +139,7 @@ def load_hero_animation() -> CharacterAnimation:
         frames={
             Direction.IDLE: (1, 1),
             Direction.NORTH: [(7, 4), (7, 4), (-7, 4), (-7, 4), 0.4],
-            Direction.SOUTH: [(8, 4), 0.4],
+            Direction.SOUTH: [(4, 2), (5, 2), 0.4],
             Direction.EAST: [(1, 5), (2, 5), (3, 5), (4, 5), (5, 5), (6, 5), (7, 5), (8, 5), 0.4],
             Direction.WEST: [(-1, 5), (-2, 5), (-3, 5), (-4, 5), (-5, 5), (-6, 5), (-7, 5), (-8, 5), 0.4],
         }
@@ -158,7 +158,7 @@ class Hero(pygame.sprite.Sprite):
         self._position = [0.0, 0.0]
         self._old_position = [0.0, 0.0]
         self.rect = self.image.get_rect()
-        self.feet = pygame.rect.Rect(0.0, 0.0, self.rect.width * 0.5, 2.0)
+        self.feet = pygame.rect.Rect(0.0, 0.0, self.rect.width * 0.5, 8.0)
 
     @property
     def position(self) -> list[float]:
