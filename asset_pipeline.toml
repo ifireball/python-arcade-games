@@ -1,0 +1,6 @@
+[collectibles]
+type = "tileset"
+
+[collectibles.animations.balloons-on-ground]
+from = ["baloons*.png"]
+duration = 3000.0
