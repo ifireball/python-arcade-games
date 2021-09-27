@@ -130,3 +130,6 @@ dmypy.json
 
 # Temporary, unprocessed resource data
 /resource_making/raw/
+
+# Tiled temporary session file
+/tiled-project.tiled-session

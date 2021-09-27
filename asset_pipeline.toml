@@ -2,5 +2,5 @@
 type = "tileset"
 
 [collectibles.animations.balloons-on-ground]
-from = ["baloons*.png"]
+from = ["balloons*.png"]
 duration = 3000

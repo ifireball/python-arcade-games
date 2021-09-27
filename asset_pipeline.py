@@ -5,7 +5,7 @@ from hashlib import sha256
 from itertools import chain
 from math import ceil, sqrt
 from pathlib import Path
-from xml.etree.ElementTree import Element, ElementTree, SubElement
+from xml.etree.ElementTree import Element, ElementTree, SubElement, indent
 
 import pygame
 import toml
@@ -170,8 +170,11 @@ class TileSet:
     ) -> Tuple[OptimizedAnimationInfo, ImageSet]:
         animation = OptimizedAnimationInfo(name)
         frame_files = \
-            list(chain.from_iterable(input_path.glob(pattern) for pattern in animation_cfg.source_file_patterns))
-        frame_duration = animation_cfg.duration / len(frame_files)
+            list(chain.from_iterable(
+                sorted(input_path.glob(pattern)) for pattern in animation_cfg.source_file_patterns
+            ))
+        print(f"Making animation: {name} from files: {[f.name for f in frame_files]}")
+        frame_duration: int = animation_cfg.duration // len(frame_files)
         for frame_file in frame_files:
             image = pygame.image.load(frame_file)
             image_set, tile_id = image_set.with_image(image)
@@ -199,6 +202,7 @@ class TileSet:
     def save_to(self, save_path: Path) -> None:
         pygame.image.save(self.image, save_path / f"{self.name}.png")
         xml_doc = ElementTree(self.to_xml())
+        indent(xml_doc)
         xml_doc.write(save_path / f"{self.name}.tsx")
 
 
@@ -249,7 +253,7 @@ class ImageSet:
         n_tiles = len(self.images)
         tile_width, tile_height = self.images[0].get_size()
         width = int(ceil(sqrt(n_tiles)))
-        height = n_tiles // width
+        height = int(ceil(n_tiles / width))
         surface = pygame.Surface(size=(width * tile_width, height * tile_height), depth=32, flags=pygame.SRCALPHA)
         for img_idx, img in enumerate(self.images):
             x, y = img_idx % width, img_idx // width
@@ -332,16 +336,11 @@ def main() -> None:
     configuration = Configuration.from_toml(configuration_path)
     print(configuration)
 
-    img = pygame.image.load(script_path / "resources/hero.png")
-    img2 = pygame.image.load(script_path / "resources/hero.png")
-    print(img, img2)
-    print(id(img), id(img2))
-    print(hash(img), hash(img2))
-    print(surface_digest(img), surface_digest(img2))
+    assets = AssetCollection.from_configuration(configuration, script_path / INPUT_DIR)
+    print(assets)
 
-    surface = pygame.Surface(size=(100, 100), depth=32, flags=pygame.SRCALPHA)
-    print(surface)
-    print(surface.get_masks(), surface.get_shifts())
+    for tileset in assets.tilesets:
+        tileset.save_to(script_path / OUTPUT_DIR)
 
 
 if __name__ == "__main__":
