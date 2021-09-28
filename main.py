@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from enum import IntEnum
 from pathlib import Path
 from types import MappingProxyType
-from typing import Callable, Collection, Dict, Mapping, Tuple
+from typing import Any, Callable, Collection, Dict, Mapping, Tuple
 
 import pygame
 import pyscroll.data
@@ -91,11 +91,35 @@ class Animation:
     frames: Tuple[AnimationFrame]
 
     @classmethod
-    def load_from_sprite_sheet(cls, sprite_sheet: SpriteSheet, frames: Collection[Tuple[int, int], ...], duration: float):
+    def load_from_sprite_sheet(
+        cls, sprite_sheet: SpriteSheet, frames: Collection[Tuple[int, int], ...], duration: float
+    ) -> Animation:
         frame_duration = int(duration * 1000.0 / len(frames))
         return cls(
             frames=tuple(AnimationFrame(sprite_sheet.get_frame_at(x, y), frame_duration) for x, y in frames),
         )
+
+    @classmethod
+    def load_from_tmx_tile(cls, tmx_data: pytmx.TiledMap, tile_id: int) -> Animation:
+        tile_data: Mapping[str, Any] = tmx_data.tile_properties.get(tile_id, {})
+        frames: Collection[pytmx.pytmx.AnimationFrame] = tile_data.get('frames', [
+            pytmx.pytmx.AnimationFrame(tile_id, 0)
+        ])
+        return cls(frames=tuple(
+            AnimationFrame(tmx_data.get_tile_image_by_gid(tile_frame_id), tile_frame_duration)
+            for tile_frame_id, tile_frame_duration in frames
+        ))
+
+    @classmethod
+    def load_from_tmx_by_name(cls, tmx_data: pytmx.TiledMap, name: str) -> Animation:
+        try:
+            tile_id = next(
+                tid for tid, props in tmx_data.tile_properties.items() if props.get('animation_name') == name
+            )
+        except StopIteration as e:
+            raise KeyError(f"Animation {name} not found in TMX data") from e
+        return cls.load_from_tmx_tile(tmx_data, tile_id)
+
 
 
 @dataclass()
@@ -165,6 +189,10 @@ class CharacterAnimation:
             raise AttributeError("Character animation must at least include idle frames")
         final_frames = defaultdict(lambda: final_frames[Direction.IDLE], final_frames)
         return cls(MappingProxyType(final_frames))
+
+    @classmethod
+    def load_from_tmx_by_name(cls, tmx_data: pytmx.TiledMap, name: str):
+        return cls(MappingProxyType(defaultdict(lambda: Animation.load_from_tmx_by_name(tmx_data, name))))
 
 
 def load_hero_animation() -> CharacterAnimation:
@@ -262,6 +290,12 @@ class QuestGame:
         sprites_layer = tmx_data.layernames.get(MAP_SPRITES_LAYER)
         hero_layer = sprites_layer.id - 1 if sprites_layer else 0
         self.group.add(self.hero, layer=hero_layer)
+
+        balloons = Entity(CharacterAnimation.load_from_tmx_by_name(tmx_data, "balloons-on-ground"))
+        balloons.position = (self.hero.position[0] + 100, self.hero.position[1])
+        self.group.add(balloons, layer=hero_layer)
+
+
 
     def draw(self, surface: pygame.Surface) -> None:
         self.group.center(self.hero.rect.center)
