@@ -95,9 +95,4 @@
   <object id="40" x="1312" y="1024" width="64" height="64"/>
   <object id="41" x="1312" y="864" width="64" height="64"/>
  </objectgroup>
- <layer id="8" name="Collectibles" width="50" height="50">
-  <data encoding="base64" compression="gzip">
-   H4sIAAAAAAAAA+3WMQ0AQAgEQRL8G0LdK/iGAihmFGx1uQgAAAAAJlVuFwAA/PkqwAW2CADoeri0t2wQJwAA
-  </data>
- </layer>
 </map>

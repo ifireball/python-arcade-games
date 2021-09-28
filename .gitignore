@@ -133,3 +133,7 @@ dmypy.json
 
 # Tiled temporary session file
 /tiled-project.tiled-session
+/resource_making/balloon-fly.blend1
+
+# Blender temporary files
+*.blend1
