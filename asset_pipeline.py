@@ -286,7 +286,7 @@ class PropertyValue(metaclass=ABCMeta):
         suffix = "Value"
         klass = cls.__name__
         if klass.startswith(prefix) and klass.endswith(suffix):
-            return klass[len(prefix):-len(suffix)]
+            return klass[len(prefix):-len(suffix)].lower()
         else:
             raise ValueError(f"Property value class names must begin with {prefix} and end with {suffix}")
 
