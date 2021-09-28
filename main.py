@@ -1,9 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import Field, dataclass, field
-from enum import Enum, IntEnum
+from collections import defaultdict
+from dataclasses import dataclass, field
+from enum import IntEnum
 from pathlib import Path
-from typing import Callable, Collection, Dict, Tuple, Union
+from types import MappingProxyType
+from typing import Callable, Collection, Dict, Mapping, Tuple
 
 import pygame
 import pyscroll.data
@@ -79,21 +81,61 @@ class SpriteSheet:
 
 
 @dataclass(frozen=True)
+class AnimationFrame:
+    image: pygame.Surface
+    duration: int
+
+
+@dataclass(frozen=True)
 class Animation:
-    frames: Tuple[pygame.Surface]
-    duration: float
+    frames: Tuple[AnimationFrame]
 
     @classmethod
     def load_from_sprite_sheet(cls, sprite_sheet: SpriteSheet, frames: Collection[Tuple[int, int], ...], duration: float):
+        frame_duration = int(duration * 1000.0 / len(frames))
         return cls(
-            frames=tuple(sprite_sheet.get_frame_at(x, y) for x, y in frames),
-            duration=duration
+            frames=tuple(AnimationFrame(sprite_sheet.get_frame_at(x, y), frame_duration) for x, y in frames),
         )
+
+
+@dataclass()
+class AnimationPlayer:
+    animation: Animation
+
+    _current_frame_idx: int = field(default=0, init=False)
+    _current_frame_time: int = field(default=0, init=False)
+    _current_frame_duration: int = field(init=False)
+    _animation: Animation = field(init=False)
+
+    @property
+    def animation(self) -> Animation:
+        return self._animation
+
+    @animation.setter
+    def animation(self, value: Animation) -> None:
+        self._current_frame_idx = 0
+        self._current_frame_time = 0
+        self._animation = value
+        self._current_frame_duration = self._animation.frames[self._current_frame_idx].duration
+
+    @property
+    def current_frame(self) -> pygame.Surface:
+        return self.animation.frames[self._current_frame_idx].image
+
+    def update(self, dt: float = 0.0) -> None:
+        if self._current_frame_duration <= 0:
+            return
+        frames = self.animation.frames
+        self._current_frame_time += int(dt * 1000.0)
+        while self._current_frame_time > self._current_frame_duration:
+            self._current_frame_idx = (self._current_frame_idx + 1) % len(frames)
+            self._current_frame_time -= self._current_frame_duration
+            self._current_frame_duration = frames[self._current_frame_idx].duration
 
 
 @dataclass(frozen=True)
 class CharacterAnimation:
-    frames: Dict[Direction, Animation]
+    frames: Mapping[Direction, Animation]
 
     @classmethod
     def load_from_sprite_sheet(
@@ -121,16 +163,8 @@ class CharacterAnimation:
             final_frames[direction] = Animation.load_from_sprite_sheet(sprite_sheet, spec_items, duration)
         if Direction.IDLE not in final_frames:
             raise AttributeError("Character animation must at least include idle frames")
-        return cls(final_frames)
-
-    def get_frame(self, direction: Direction, motion_time: float = 0.0):
-        animation = self.frames.get(direction, self.frames[Direction.IDLE])
-        if animation.duration:
-            num_frames = len(animation.frames)
-            frame_num = int(num_frames * motion_time / animation.duration) % num_frames
-        else:
-            frame_num = 0
-        return animation.frames[frame_num]
+        final_frames = defaultdict(lambda: final_frames[Direction.IDLE], final_frames)
+        return cls(MappingProxyType(final_frames))
 
 
 def load_hero_animation() -> CharacterAnimation:
@@ -152,8 +186,8 @@ class Hero(pygame.sprite.Sprite):
 
         self.animation = load_hero_animation()
         self.direction = Direction.IDLE
-        self.animation_timer = 0.0
-        self.image = self.animation.get_frame(self.direction)
+        self.animation_player = AnimationPlayer(self.animation.frames[self.direction])
+        self.image = self.animation_player.current_frame
         self.velocity = [0.0, 0.0]
         self._position = [0.0, 0.0]
         self._old_position = [0.0, 0.0]
@@ -187,11 +221,11 @@ class Hero(pygame.sprite.Sprite):
             new_direction = Direction.IDLE
 
         if self.direction == new_direction:
-            self.animation_timer += dt
+            self.animation_player.update(dt)
         else:
             self.direction = new_direction
-            self.animation_timer = 0
-        self.image = self.animation.get_frame(self.direction, self.animation_timer)
+            self.animation_player.animation = self.animation.frames[self.direction]
+        self.image = self.animation_player.current_frame
 
 
     def move_back(self, dt: float) -> None:
