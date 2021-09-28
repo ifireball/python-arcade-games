@@ -180,11 +180,11 @@ def load_hero_animation() -> CharacterAnimation:
     )
 
 
-class Hero(pygame.sprite.Sprite):
-    def __init__(self) -> None:
+class Entity(pygame.sprite.Sprite):
+    def __init__(self, animation: CharacterAnimation) -> None:
         super().__init__()
 
-        self.animation = load_hero_animation()
+        self.animation = animation
         self.direction = Direction.IDLE
         self.animation_player = AnimationPlayer(self.animation.frames[self.direction])
         self.image = self.animation_player.current_frame
@@ -233,6 +233,11 @@ class Hero(pygame.sprite.Sprite):
         self._position = self._old_position
         self.rect.topleft = self._position
         self.feet.midbottom = self.rect.midbottom
+
+
+class Hero(Entity):
+    def __init__(self):
+        super().__init__(load_hero_animation())
 
 
 class QuestGame:
