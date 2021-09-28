@@ -1,5 +1,5 @@
-<tileset name="collectibles" tilewidth="32" tileheight="32" tilecount="23">
-  <image source="collectibles.png" width="160" height="160" />
+<tileset name="collectibles" tilewidth="32" tileheight="32" tilecount="39">
+  <image source="collectibles.png" width="224" height="192" />
   <tile id="0">
     <properties>
       <property name="animation_name" type="string" value="balloons-on-ground" />
@@ -43,6 +43,36 @@
       <frame tileid="20" duration="100" />
       <frame tileid="21" duration="100" />
       <frame tileid="22" duration="100" />
+    </animation>
+  </tile>
+  <tile id="23">
+    <properties>
+      <property name="animation_name" type="string" value="balloons-green-fly" />
+    </properties>
+    <animation>
+      <frame tileid="23" duration="100" />
+      <frame tileid="24" duration="100" />
+      <frame tileid="25" duration="100" />
+      <frame tileid="26" duration="100" />
+      <frame tileid="27" duration="100" />
+      <frame tileid="28" duration="100" />
+      <frame tileid="29" duration="100" />
+      <frame tileid="30" duration="100" />
+    </animation>
+  </tile>
+  <tile id="31">
+    <properties>
+      <property name="animation_name" type="string" value="balloons-blue-fly" />
+    </properties>
+    <animation>
+      <frame tileid="31" duration="100" />
+      <frame tileid="32" duration="100" />
+      <frame tileid="33" duration="100" />
+      <frame tileid="34" duration="100" />
+      <frame tileid="35" duration="100" />
+      <frame tileid="36" duration="100" />
+      <frame tileid="37" duration="100" />
+      <frame tileid="38" duration="100" />
     </animation>
   </tile>
 </tileset>

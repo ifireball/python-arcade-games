@@ -8,3 +8,11 @@ duration = 3000
 [collectibles.animations.balloons-red-fly]
 from = ["balloon-red-fly[0-9]*.png"]
 duration = 800
+
+[collectibles.animations.balloons-green-fly]
+from = ["balloon-green-fly[0-9]*.png"]
+duration = 800
+
+[collectibles.animations.balloons-blue-fly]
+from = ["balloon-blue-fly[0-9]*.png"]
+duration = 800

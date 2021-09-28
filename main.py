@@ -283,11 +283,14 @@ class Hero(Entity):
 class CollectibleBalloons(Entity):
     def on_hero_touch(self, hero: Hero, game: QuestGame) -> None:
         self.kill()
-        flying_red = game.make_animated_entity(Entity, "balloons-red-fly")
-        flying_red.position = self.position
-        flying_red.velocity = [0, -60]
-        game.place_entity_in_sky(flying_red)
-        game.set_world_escaping_entity(flying_red)
+        animations = ["balloons-red-fly", "balloons-green-fly", "balloons-blue-fly"]
+        velocities = [[0, -60], [-16, -58], [16, -58]]
+        for animation, velocity in zip(animations, velocities):
+            flying_balloon = game.make_animated_entity(Entity, animation)
+            flying_balloon.position = self.position
+            flying_balloon.velocity = velocity
+            game.place_entity_in_sky(flying_balloon)
+            game.set_world_escaping_entity(flying_balloon)
 
 
 class QuestGame:
