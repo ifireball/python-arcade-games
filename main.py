@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+from abc import ABCMeta, abstractmethod
 from collections import defaultdict
 from dataclasses import dataclass, field
 from enum import IntEnum
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Callable, Collection, Dict, Mapping, Tuple, Type
+from typing import Any, Callable, Collection, Dict, Mapping, MutableMapping, Tuple, Type
 
 import pygame
 import pyscroll.data
@@ -146,11 +147,11 @@ class AnimationPlayer:
     def current_frame(self) -> pygame.Surface:
         return self.animation.frames[self._current_frame_idx].image
 
-    def update(self, dt: float = 0.0) -> None:
+    def update(self, dt: int = 0) -> None:
         if self._current_frame_duration <= 0:
             return
         frames = self.animation.frames
-        self._current_frame_time += int(dt * 1000.0)
+        self._current_frame_time += dt
         while self._current_frame_time > self._current_frame_duration:
             self._current_frame_idx = (self._current_frame_idx + 1) % len(frames)
             self._current_frame_time -= self._current_frame_duration
@@ -208,6 +209,22 @@ def load_hero_animation() -> CharacterAnimation:
     )
 
 
+class MapObject(metaclass=ABCMeta):
+    known_classes: MutableMapping[str, Type[MapObject]] = dict()
+
+    def __init_subclass__(cls: Type[MapObject], **kwargs) -> None:
+        super().__init_subclass__(**kwargs)
+        if hasattr(MapObject, "__abstractmethods__") and MapObject.__abstractmethods__.issubset(cls.__dict__):
+            # If the subclass implements al the abstract methods
+            MapObject.known_classes[cls.__name__] = cls
+
+    @classmethod
+    @abstractmethod
+    def create_from_map_object(cls, obj: pytmx.TiledObject, game: QuestGame) -> None:
+        obj_type = obj.type or obj.properties.get("type")
+        MapObject.known_classes[obj_type].create_from_map_object(obj, game)
+
+
 class Entity(pygame.sprite.Sprite):
     def __init__(self, animation: CharacterAnimation) -> None:
         super().__init__()
@@ -230,10 +247,10 @@ class Entity(pygame.sprite.Sprite):
     def position(self, value: list[float]) -> None:
         self._position = list(value)
 
-    def update(self, dt: float) -> None:
+    def update(self, dt: int = 0, visible_rect: pygame.Rect = pygame.Rect(0, 0, 0, 0)) -> None:
         self._old_position = self._position[:]
-        self._position[0] += self.velocity[0] * dt
-        self._position[1] += self.velocity[1] * dt
+        self._position[0] += self.velocity[0] * dt / 1000.0
+        self._position[1] += self.velocity[1] * dt / 1000.0
         self.rect.topleft = self._position
         self.feet.midbottom = self.rect.midbottom
 
@@ -280,7 +297,14 @@ class Hero(Entity):
         self.move_back()
 
 
-class CollectibleBalloons(Entity):
+class CollectibleBalloons(Entity, MapObject):
+    @classmethod
+    def create_from_map_object(cls, obj: pytmx.TiledObject, game: QuestGame) -> None:
+        balloons = game.make_animated_entity(cls, "balloons-on-ground")
+        balloons.position = (obj.x, obj.y)
+        game.place_entity_on_ground(balloons)
+        game.make_entity_touchable(balloons)
+
     def on_hero_touch(self, hero: Hero, game: QuestGame) -> None:
         self.kill()
         animations = ["balloons-red-fly", "balloons-green-fly", "balloons-blue-fly"]
@@ -291,6 +315,12 @@ class CollectibleBalloons(Entity):
             flying_balloon.velocity = velocity
             game.place_entity_in_sky(flying_balloon)
             game.set_world_escaping_entity(flying_balloon)
+
+
+class BalloonSpawner(MapObject):
+    @classmethod
+    def create_from_map_object(cls, obj: pytmx.TiledObject, game: QuestGame) -> None:
+        pass
 
 
 class QuestGame:
@@ -310,22 +340,29 @@ class QuestGame:
         self.map_layer = pyscroll.BufferedRenderer(map_data, screen.surface.get_size(), clamp_camera=True)
         self.group = pyscroll.PyscrollGroup(map_layer=self.map_layer)
 
-        sprites_layer = tmx_data.layernames.get(MAP_SPRITES_LAYER)
-        self.sprite_layer_number = sprites_layer.id - 1 if sprites_layer else 0
+        self.sprite_layer_number = \
+            next((idx for idx, layer in enumerate(tmx_data.layers) if layer.name == MAP_SPRITES_LAYER), 0)
         self.topmost_layer_number = max(layer.id for layer in tmx_data.layers) - 1
 
         self.touchable = pygame.sprite.Group()
         self.world_escaping = pygame.sprite.Group()
+
+        for obj in tmx_data.objects:
+            if not obj.type and "type" not in obj.properties:
+                continue
+            MapObject.create_from_map_object(obj, self)
 
         self.hero = Hero()
         self.hero.position = self.map_layer.map_rect.center
         self.place_entity_on_ground(self.hero)
         self.set_world_escaping_entity(self.hero)
 
-        balloons = self.make_animated_entity(CollectibleBalloons, "balloons-on-ground")
-        balloons.position = (self.hero.position[0] + 100, self.hero.position[1])
-        self.place_entity_on_ground(balloons)
-        self.make_entity_touchable(balloons)
+        # for x in range(int(self.hero.position[0]) - 128, int(self.hero.position[0]) + 128, 20):
+        #     for y in range(int(self.hero.position[1]) - 128, int(self.hero.position[1]) + 128, 20):
+        #         balloons = self.make_animated_entity(CollectibleBalloons, "balloons-on-ground")
+        #         balloons.position = (x, y)
+        #         self.place_entity_on_ground(balloons)
+        #         self.make_entity_touchable(balloons)
 
     def make_animated_entity(self, ent_class: Type[Entity], animation_name: str) -> Entity:
         return ent_class(CharacterAnimation.load_from_tmx_by_name(self.tmx_data, animation_name))
@@ -374,8 +411,8 @@ class QuestGame:
         else:
             self.hero.velocity[0] = 0
 
-    def update(self, dt: float = 0) -> None:
-        self.group.update(dt)
+    def update(self, dt: int = 0) -> None:
+        self.group.update(dt, visible_rect=self.group.view)
         if self.hero.feet.collidelist(self.walls) >= 0:
             self.hero.move_back()
         # print(self.hero.feet, self.world_rect)
@@ -399,7 +436,7 @@ class QuestGame:
 
         try:
             while self.running:
-                dt = clock.tick(fps) / 1000.0
+                dt = clock.tick(fps)
                 self.handle_input()
                 self.update(dt)
                 self.draw(self.screen.surface)

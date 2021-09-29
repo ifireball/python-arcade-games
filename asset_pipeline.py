@@ -13,7 +13,7 @@ import toml
 """asset_pipeline.py - Processing raw media files into game assets"""
 
 from dataclasses import dataclass, field
-from typing import Collection, Mapping, Tuple
+from typing import Collection, Mapping, Optional, Tuple
 
 INPUT_DIR = "resource_making/raw"
 OUTPUT_DIR = "resources"
@@ -63,6 +63,7 @@ class TilesetConfiguration:
 class AnimationConfiguration:
     source_file_patterns: Collection[str]
     duration: int
+    game_class: Optional[str] = None
 
     @classmethod
     def from_mapping(cls, data: Mapping):
@@ -76,7 +77,7 @@ class AnimationConfiguration:
         duration = data['duration']
         if not isinstance(duration, int):
             raise ValueError("Animation duration must be specified as an integer value")
-        return AnimationConfiguration(source_file_patterns, duration)
+        return AnimationConfiguration(source_file_patterns, duration, data.get('game_class'))
 
 
 @dataclass(frozen=True)
@@ -97,6 +98,7 @@ class AssetCollection:
 class OptimizedAnimationInfo:
     name: str
     frames: Tuple[TileAnimationFrame] = field(default_factory=tuple)
+    game_class: Optional[str] = None
 
     def with_appended_frame(self, tile_id: int, duration: int) -> OptimizedAnimationInfo:
         """Returns a new OptimizedAnimationInfo object with the given frame added. If the tile of the new frame is
@@ -107,7 +109,7 @@ class OptimizedAnimationInfo:
                 self.frames[:-1] + (TileAnimationFrame(tile_id=tile_id, duration=last_frame.duration + duration),)
         else:
             new_frames = self.frames + (TileAnimationFrame(tile_id=tile_id, duration=duration),)
-        return OptimizedAnimationInfo(name=self.name, frames=new_frames)
+        return OptimizedAnimationInfo(name=self.name, frames=new_frames, game_class=self.game_class)
 
 
 @dataclass(frozen=True)
@@ -160,6 +162,7 @@ class TileSet:
                      TILE_ANIMATION_NAME_PROPERTY: PropertyStringValue(animation.name)
                 },
                 frames=animation.frames,
+                type=animation.game_class or ""
             )
             tiles.append(tile)
         return tuple(tiles), image_set
@@ -168,7 +171,7 @@ class TileSet:
     def load_and_optimize_animation(
         cls, name: str, animation_cfg: AnimationConfiguration, image_set: ImageSet, input_path: Path
     ) -> Tuple[OptimizedAnimationInfo, ImageSet]:
-        animation = OptimizedAnimationInfo(name)
+        animation = OptimizedAnimationInfo(name, game_class=animation_cfg.game_class)
         frame_files = \
             list(chain.from_iterable(
                 sorted(input_path.glob(pattern)) for pattern in animation_cfg.source_file_patterns
@@ -265,10 +268,13 @@ class ImageSet:
 class Tile(metaclass=ABCMeta):
     id: int
     properties: Mapping[str, PropertyValue]
+    type: str
 
     @abstractmethod
     def to_xml(self) -> Element:
         elm = Element('tile', id=str(self.id))
+        if self.type:
+            elm.attrib['type'] = self.type
         if self.properties:
             properties = SubElement(elm, 'properties')
             properties.extend(

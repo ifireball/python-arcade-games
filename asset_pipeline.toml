@@ -4,6 +4,7 @@ type = "tileset"
 [collectibles.animations.balloons-on-ground]
 from = ["balloons[0-9]*.png"]
 duration = 3000
+game_class = "CollectibleBalloons"
 
 [collectibles.animations.balloons-red-fly]
 from = ["balloon-red-fly[0-9]*.png"]

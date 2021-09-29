@@ -1,6 +1,6 @@
 <tileset name="collectibles" tilewidth="32" tileheight="32" tilecount="39">
   <image source="collectibles.png" width="224" height="192" />
-  <tile id="0">
+  <tile id="0" type="CollectibleBalloons">
     <properties>
       <property name="animation_name" type="string" value="balloons-on-ground" />
     </properties>
