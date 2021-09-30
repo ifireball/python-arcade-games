@@ -35,7 +35,13 @@
   </data>
  </layer>
  <objectgroup id="9" name="collectibles">
-  <object id="46" type="BalloonSpawner" x="866" y="1068" width="172" height="208"/>
+  <object id="46" type="Spawner" x="814" y="1011.33" width="224" height="576.667">
+   <properties>
+    <property name="spawn_max" type="int" value="10"/>
+    <property name="spawn_timeout_max" type="int" value="30000"/>
+    <property name="spawn_timeout_min" type="int" value="5000"/>
+   </properties>
+  </object>
   <object id="47" gid="954" x="558.667" y="689.333" width="32" height="32"/>
   <object id="48" gid="954" x="620.667" y="786" width="32" height="32"/>
   <object id="49" gid="954" x="491.333" y="754" width="32" height="32"/>

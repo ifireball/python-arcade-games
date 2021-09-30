@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import inspect
+import random
 from abc import ABCMeta, abstractmethod
 from collections import defaultdict
 from dataclasses import dataclass, field
 from enum import IntEnum
 from pathlib import Path
+from random import randrange
 from types import MappingProxyType
-from typing import Any, Callable, Collection, Dict, Mapping, MutableMapping, Tuple, Type
+from typing import Any, Callable, Collection, Dict, Mapping, MutableMapping, Sequence, Tuple, Type, TypeVar
 
 import pygame
 import pyscroll.data
@@ -210,24 +213,33 @@ def load_hero_animation() -> CharacterAnimation:
 
 
 class MapObject(metaclass=ABCMeta):
-    known_classes: MutableMapping[str, Type[MapObject]] = dict()
+    __known_classes: MutableMapping[str, Type[MapObject]] = dict()
 
     def __init_subclass__(cls: Type[MapObject], **kwargs) -> None:
         super().__init_subclass__(**kwargs)
-        if hasattr(MapObject, "__abstractmethods__") and MapObject.__abstractmethods__.issubset(cls.__dict__):
-            # If the subclass implements al the abstract methods
-            MapObject.known_classes[cls.__name__] = cls
+        if not inspect.isabstract(cls):
+            MapObject.__known_classes[cls.__name__] = cls
 
     @classmethod
     @abstractmethod
     def create_from_map_object(cls, obj: pytmx.TiledObject, game: QuestGame) -> None:
         obj_type = obj.type or obj.properties.get("type")
-        MapObject.known_classes[obj_type].create_from_map_object(obj, game)
+        MapObject.__known_classes[obj_type].create_from_map_object(obj, game)
 
 
-class Entity(pygame.sprite.Sprite):
-    def __init__(self, animation: CharacterAnimation) -> None:
+class Entity(pygame.sprite.Sprite, metaclass=ABCMeta):
+    def __init__(self, game: QuestGame) -> None:
         super().__init__()
+        game.set_invisible_entity(self)
+
+    @abstractmethod
+    def update(self, dt: int, game: QuestGame) -> None:
+        pass
+
+
+class AnimatedEntity(Entity):
+    def __init__(self, animation: CharacterAnimation, game: QuestGame) -> None:
+        super().__init__(game)
 
         self.animation = animation
         self.direction = Direction.IDLE
@@ -240,14 +252,23 @@ class Entity(pygame.sprite.Sprite):
         self.feet = pygame.rect.Rect(0.0, 0.0, self.rect.width * 0.5, 8.0)
 
     @property
-    def position(self) -> list[float]:
-        return list(self._position)
+    def position(self) -> Tuple[float, float]:
+        return self._position[0], self._position[1]
 
     @position.setter
-    def position(self, value: list[float]) -> None:
-        self._position = list(value)
+    def position(self, value: Sequence[float]) -> None:
+        self._position = [value[0], value[1]]
 
-    def update(self, dt: int = 0, visible_rect: pygame.Rect = pygame.Rect(0, 0, 0, 0)) -> None:
+    @property
+    def midbottom(self) -> Tuple[float, float]:
+        return self.rect.midbottom
+
+    @midbottom.setter
+    def midbottom(self, value: Sequence[float]) -> None:
+        self.rect.midbottom = value
+        self.position = self.rect.topleft
+
+    def update(self, dt: int, game: QuestGame) -> None:
         self._old_position = self._position[:]
         self._position[0] += self.velocity[0] * dt / 1000.0
         self._position[1] += self.velocity[1] * dt / 1000.0
@@ -281,46 +302,138 @@ class Entity(pygame.sprite.Sprite):
     def on_hero_touch(self, hero: Hero, game: QuestGame) -> None:
         print(f"Player touched entity {self} at {self.rect.center}")
 
-    def on_exit_world(self, hero: Hero, game:QuestGame) -> None:
+    def on_exit_world(self, game: QuestGame) -> None:
         self.kill()
         print(f"Entity: {self} had left this world")
 
-    def really_touch(self, other: Entity):
+    def really_touch(self, other: AnimatedEntity):
         return self.feet.colliderect(other.feet)
 
 
-class Hero(Entity):
-    def __init__(self):
-        super().__init__(load_hero_animation())
+class SpawnableEntity(AnimatedEntity, MapObject, metaclass=ABCMeta):
+    __known_classes: MutableMapping[str, Type[SpawnableEntity]] = dict()
 
-    def on_exit_world(self, hero: Hero, game:QuestGame) -> None:
+    def __init_subclass__(cls: Type[SpawnableEntity], **kwargs) -> None:
+        super().__init_subclass__(**kwargs)
+        if not inspect.isabstract(cls):
+            SpawnableEntity.__known_classes[cls.__name__] = cls
+
+    @classmethod
+    @abstractmethod
+    def spawn(cls, location: Tuple[int, int], game: QuestGame) -> SpawnableEntity:
+        ...
+
+    @classmethod
+    def spawn_by_class(cls, obj_class: str, location: Tuple[int, int], game: QuestGame) -> SpawnableEntity:
+        return SpawnableEntity.__known_classes[obj_class].spawn(location, game)
+
+    @classmethod
+    def create_from_map_object(cls, obj: pytmx.TiledObject, game: QuestGame) -> None:
+        obj_type = obj.type or obj.properties.get("type")
+        SpawnableEntity.spawn_by_class(obj_type, (obj.x, obj.y), game)
+
+
+class OnGroundEntity(AnimatedEntity, metaclass=ABCMeta):
+    def __init__(self, animation: CharacterAnimation, game: QuestGame) -> None:
+        super().__init__(animation, game)
+        game.place_entity_on_ground(self)
+
+
+class TouchableEntity(AnimatedEntity, metaclass=ABCMeta):
+    def __init__(self, animation: CharacterAnimation, game: QuestGame) -> None:
+        super().__init__(animation, game)
+        game.make_entity_touchable(self)
+
+    @abstractmethod
+    def on_hero_touch(self, hero: Hero, game: QuestGame) -> None:
+        pass
+
+
+class FlyingEntity(AnimatedEntity, metaclass=ABCMeta):
+    def __init__(self, animation: CharacterAnimation, game: QuestGame) -> None:
+        super().__init__(animation, game)
+        game.place_entity_in_sky(self)
+
+
+class EscapingEntity(AnimatedEntity, metaclass=ABCMeta):
+    def __init__(self, animation: CharacterAnimation, game: QuestGame) -> None:
+        super().__init__(animation, game)
+        game.set_world_escaping_entity(self)
+
+
+class Hero(OnGroundEntity, EscapingEntity):
+    def __init__(self, game: QuestGame):
+        super().__init__(load_hero_animation(), game)
+
+    def on_exit_world(self, game: QuestGame) -> None:
         self.move_back()
 
 
-class CollectibleBalloons(Entity, MapObject):
+class CollectibleBalloons(OnGroundEntity, TouchableEntity, SpawnableEntity):
     @classmethod
-    def create_from_map_object(cls, obj: pytmx.TiledObject, game: QuestGame) -> None:
+    def spawn(cls, location: Tuple[int, int], game: QuestGame) -> SpawnableEntity:
         balloons = game.make_animated_entity(cls, "balloons-on-ground")
-        balloons.position = (obj.x, obj.y)
-        game.place_entity_on_ground(balloons)
-        game.make_entity_touchable(balloons)
+        balloons.position = location
+        return balloons
 
     def on_hero_touch(self, hero: Hero, game: QuestGame) -> None:
         self.kill()
         animations = ["balloons-red-fly", "balloons-green-fly", "balloons-blue-fly"]
         velocities = [[0, -60], [-16, -58], [16, -58]]
         for animation, velocity in zip(animations, velocities):
-            flying_balloon = game.make_animated_entity(Entity, animation)
+            flying_balloon = game.make_animated_entity(FlyingBalloon, animation)
             flying_balloon.position = self.position
             flying_balloon.velocity = velocity
-            game.place_entity_in_sky(flying_balloon)
-            game.set_world_escaping_entity(flying_balloon)
 
 
-class BalloonSpawner(MapObject):
+class FlyingBalloon(FlyingEntity, EscapingEntity):
+    pass
+
+
+class Spawner(Entity, MapObject):
+    def __init__(self, game: QuestGame):
+        super().__init__(game)
+        self.spawn_timeout_min = 5000
+        self.spawn_timeout_max = 5001
+        self.spawn_timer = 0
+        self.spawn_timeout = randrange(self.spawn_timeout_min, self.spawn_timeout_max)
+        self.spawned_classes = ("CollectibleBalloons",)
+        self.spawn_max = 4
+        self.spawned_objects = pygame.sprite.Group()
+
+    MAP_CONFIGURABLE_INT_ATTRS = ("spawn_timeout_min", "spawn_timeout_max", "spawn_max")
+
     @classmethod
     def create_from_map_object(cls, obj: pytmx.TiledObject, game: QuestGame) -> None:
-        pass
+        instance = cls(game)
+        instance.rect = pygame.Rect(obj.x, obj.y, obj.width, obj.height)
+        for attr in cls.MAP_CONFIGURABLE_INT_ATTRS:
+            if attr in obj.properties:
+                setattr(instance, attr, int(obj.properties[attr]))
+        spawned_classes = obj.properties.get("spawned_classes", "").split()
+        if spawned_classes:
+            instance.spawned_classes = spawned_classes
+
+    def update(self, dt: int, game: QuestGame) -> None:
+        self.spawn_timer += dt
+        if self.spawn_timer >= self.spawn_timeout:
+            self.do_spawn(game)
+            self.spawn_timer = 0
+            self.spawn_timeout = randrange(self.spawn_timeout_min, self.spawn_timeout_max)
+
+    def do_spawn(self, game: QuestGame):
+        if 0 < self.spawn_max <= len(self.spawned_objects):
+            print(f"{self} at {self.rect}: reached spawn limit: {self.spawn_max}")
+            return
+        location = (randrange(self.rect.left, self.rect.right + 1), randrange(self.rect.top, self.rect.bottom + 1))
+        obj_class = random.choice(self.spawned_classes)
+        obj = SpawnableEntity.spawn_by_class(obj_class, location, game)
+        obj.midbottom = location
+        self.spawned_objects.add(obj)
+        print(f"{self} at {self.rect}: spawned {obj} as {location}")
+
+
+AnimatedEntityType = TypeVar("AnimatedEntityType", bound=AnimatedEntity)
 
 
 class QuestGame:
@@ -331,60 +444,53 @@ class QuestGame:
         self.tmx_data = tmx_data = load_map("grasslands.tmx")
         map_data = pyscroll.data.TiledMapData(tmx_data)
 
+        self.map_layer = pyscroll.BufferedRenderer(map_data, screen.surface.get_size(), clamp_camera=True)
+        self.layered_draw_group = pyscroll.PyscrollGroup(map_layer=self.map_layer)
+        self.touchable = pygame.sprite.Group()
+        self.world_escaping = pygame.sprite.Group()
+        self.invisible = pygame.sprite.Group()
+
         self.walls = [
             pygame.Rect(wall.x, wall.y, wall.width, wall.height)
             for wall in tmx_data.layernames.get(MAP_WALLS_LAYER, [])
         ]
-        self.world_rect = pygame.Rect(0, 0, tmx_data.width * tmx_data.tilewidth, tmx_data.height * tmx_data.tileheight)
-
-        self.map_layer = pyscroll.BufferedRenderer(map_data, screen.surface.get_size(), clamp_camera=True)
-        self.group = pyscroll.PyscrollGroup(map_layer=self.map_layer)
-
+        self.world_rect = self.map_layer.map_rect
         self.sprite_layer_number = \
             next((idx for idx, layer in enumerate(tmx_data.layers) if layer.name == MAP_SPRITES_LAYER), 0)
         self.topmost_layer_number = max(layer.id for layer in tmx_data.layers) - 1
-
-        self.touchable = pygame.sprite.Group()
-        self.world_escaping = pygame.sprite.Group()
 
         for obj in tmx_data.objects:
             if not obj.type and "type" not in obj.properties:
                 continue
             MapObject.create_from_map_object(obj, self)
 
-        self.hero = Hero()
-        self.hero.position = self.map_layer.map_rect.center
-        self.place_entity_on_ground(self.hero)
-        self.set_world_escaping_entity(self.hero)
+        self.hero = Hero(self)
+        self.hero.position = self.world_rect.center
 
-        # for x in range(int(self.hero.position[0]) - 128, int(self.hero.position[0]) + 128, 20):
-        #     for y in range(int(self.hero.position[1]) - 128, int(self.hero.position[1]) + 128, 20):
-        #         balloons = self.make_animated_entity(CollectibleBalloons, "balloons-on-ground")
-        #         balloons.position = (x, y)
-        #         self.place_entity_on_ground(balloons)
-        #         self.make_entity_touchable(balloons)
+    def make_animated_entity(self, ent_class: Type[AnimatedEntityType], animation_name: str) -> AnimatedEntityType:
+        return ent_class(CharacterAnimation.load_from_tmx_by_name(self.tmx_data, animation_name), self)
 
-    def make_animated_entity(self, ent_class: Type[Entity], animation_name: str) -> Entity:
-        return ent_class(CharacterAnimation.load_from_tmx_by_name(self.tmx_data, animation_name))
-
-    def make_entity_touchable(self, ent: Entity) -> Entity:
+    def make_entity_touchable(self, ent: AnimatedEntity) -> None:
         self.touchable.add(ent)
-        return ent
 
-    def place_entity_on_ground(self, ent: Entity) -> Entity:
-        self.group.add(ent, layer=self.sprite_layer_number)
-        return ent
+    def place_entity_on_ground(self, ent: AnimatedEntity) -> None:
+        self.layered_draw_group.add(ent, layer=self.sprite_layer_number)
+        self.invisible.remove(ent)
 
-    def place_entity_in_sky(self, ent: Entity) -> Entity:
-        self.group.add(ent, layer=self.topmost_layer_number)
-        return ent
+    def place_entity_in_sky(self, ent: AnimatedEntity) -> None:
+        self.layered_draw_group.add(ent, layer=self.topmost_layer_number)
+        self.invisible.remove(ent)
 
-    def set_world_escaping_entity(self, ent: Entity):
+    def set_world_escaping_entity(self, ent: AnimatedEntity):
         self.world_escaping.add(ent)
 
+    def set_invisible_entity(self, ent: Entity):
+        self.layered_draw_group.remove(ent)
+        self.invisible.add(ent)
+
     def draw(self, surface: pygame.Surface) -> None:
-        self.group.center(self.hero.rect.center)
-        self.group.draw(surface)
+        self.layered_draw_group.center(self.hero.rect.center)
+        self.layered_draw_group.draw(surface)
 
     def handle_input(self) -> None:
         for event in pygame.event.get():
@@ -411,19 +517,24 @@ class QuestGame:
         else:
             self.hero.velocity[0] = 0
 
-    def update(self, dt: int = 0) -> None:
-        self.group.update(dt, visible_rect=self.group.view)
+    @property
+    def visible_rect(self) -> pygame.Rect:
+        return self.layered_draw_group.view
+
+    def update(self, dt: int) -> None:
+        self.invisible.update(dt, self)
+        self.layered_draw_group.update(dt, self)
         if self.hero.feet.collidelist(self.walls) >= 0:
             self.hero.move_back()
         # print(self.hero.feet, self.world_rect)
         for ent in self.world_escaping:
-            assert isinstance(ent, Entity)
+            assert isinstance(ent, AnimatedEntity)
             if not self.world_rect.contains(ent.feet):
-                ent.on_exit_world(self.hero, self)
+                ent.on_exit_world(self)
 
         touched_objects = pygame.sprite.spritecollide(self.hero, self.touchable, False)
         for obj in touched_objects:
-            assert isinstance(obj, Entity)
+            assert isinstance(obj, AnimatedEntity)
             if not self.hero.really_touch(obj):
                 continue
             obj.on_hero_touch(self.hero, self)
