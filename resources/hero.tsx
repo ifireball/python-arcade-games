@@ -2,7 +2,7 @@
   <image source="hero.png" width="384" height="384" />
   <tile id="0">
     <properties>
-      <property name="animation_name" type="string" value="idle" />
+      <property name="animation_name" type="string" value="hero.idle" />
     </properties>
     <animation>
       <frame tileid="0" duration="900" />
@@ -10,7 +10,7 @@
   </tile>
   <tile id="1">
     <properties>
-      <property name="animation_name" type="string" value="north" />
+      <property name="animation_name" type="string" value="hero.north" />
     </properties>
     <animation>
       <frame tileid="1" duration="100" />
@@ -25,7 +25,7 @@
   </tile>
   <tile id="9">
     <properties>
-      <property name="animation_name" type="string" value="west" />
+      <property name="animation_name" type="string" value="hero.west" />
     </properties>
     <animation>
       <frame tileid="9" duration="100" />
@@ -40,7 +40,7 @@
   </tile>
   <tile id="17">
     <properties>
-      <property name="animation_name" type="string" value="south" />
+      <property name="animation_name" type="string" value="hero.south" />
     </properties>
     <animation>
       <frame tileid="17" duration="100" />
@@ -55,7 +55,7 @@
   </tile>
   <tile id="25">
     <properties>
-      <property name="animation_name" type="string" value="east" />
+      <property name="animation_name" type="string" value="hero.east" />
     </properties>
     <animation>
       <frame tileid="25" duration="100" />

@@ -29,7 +29,7 @@ class TileSet:
     @classmethod
     def from_configuration(cls, name: str, cfg: TilesetConfiguration, input_path: Path) -> TileSet:
         images = ImageSet()
-        animations, images = cls.load_and_optimize_animations(cfg.animations, images, input_path)
+        animations, images = cls.load_and_optimize_animations(name, cfg.animations, images, input_path)
         tiles, images = cls.generate_animation_tiles(animations, images)
         return TileSet(
             name=name,
@@ -42,11 +42,11 @@ class TileSet:
 
     @classmethod
     def load_and_optimize_animations(
-        cls, animation_cfg: Mapping[str, AnimationConfiguration], images: ImageSet, input_path: Path
+        cls, tsname: str, animation_cfg: Mapping[str, AnimationConfiguration], images: ImageSet, input_path: Path
     ) -> Tuple[Tuple[OptimizedAnimationInfo, ...], ImageSet]:
         optimized_animations = []
         for name, animation_cfg in animation_cfg.items():
-            anim, images = cls.load_and_optimize_animation(name, animation_cfg, images, input_path)
+            anim, images = cls.load_and_optimize_animation(f"{tsname}.{name}", animation_cfg, images, input_path)
             optimized_animations.append(anim)
         return tuple(optimized_animations), images
 

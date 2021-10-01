@@ -2,7 +2,7 @@
   <image source="collectibles.png" width="224" height="192" />
   <tile id="0" type="CollectibleBalloons">
     <properties>
-      <property name="animation_name" type="string" value="balloons-on-ground" />
+      <property name="animation_name" type="string" value="collectibles.balloons-on-ground" />
     </properties>
     <animation>
       <frame tileid="0" duration="100" />
@@ -32,7 +32,7 @@
   </tile>
   <tile id="15">
     <properties>
-      <property name="animation_name" type="string" value="balloons-red-fly" />
+      <property name="animation_name" type="string" value="collectibles.balloons-red-fly" />
     </properties>
     <animation>
       <frame tileid="15" duration="100" />
@@ -47,7 +47,7 @@
   </tile>
   <tile id="23">
     <properties>
-      <property name="animation_name" type="string" value="balloons-green-fly" />
+      <property name="animation_name" type="string" value="collectibles.balloons-green-fly" />
     </properties>
     <animation>
       <frame tileid="23" duration="100" />
@@ -62,7 +62,7 @@
   </tile>
   <tile id="31">
     <properties>
-      <property name="animation_name" type="string" value="balloons-blue-fly" />
+      <property name="animation_name" type="string" value="collectibles.balloons-blue-fly" />
     </properties>
     <animation>
       <frame tileid="31" duration="100" />

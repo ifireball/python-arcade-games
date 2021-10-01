@@ -40,51 +40,6 @@ class Direction(IntEnum):
 
 
 @dataclass(frozen=True)
-class SpriteSheet:
-    sheet: pygame.Surface = field()
-    width: int
-    height: int
-    _tile_cache: dict[tuple[int, int], pygame.Surface] = field(
-        default_factory=dict,
-        init=False,
-        repr=False,
-        compare=False
-    )
-
-    @classmethod
-    def load(cls, filename: str, width: int, height: int, tile_width: int = 0, tile_height: int = 0):
-        sheet_image = load_image(filename).convert_alpha()
-        if tile_width > 0 and tile_height > 0:
-            sheet_tile_rect = pygame.Rect(0, 0, sheet_image.get_width() / width, sheet_image.get_height() / height)
-            needed_tile_rect = pygame.Rect(0, 0, tile_width, tile_height)
-            adjusted_sheet_tile_rect = sheet_tile_rect.fit(needed_tile_rect)
-            if adjusted_sheet_tile_rect.width < sheet_tile_rect.width:
-                sheet_image = pygame.transform.smoothscale(
-                    sheet_image,
-                    (adjusted_sheet_tile_rect.width * width, adjusted_sheet_tile_rect.height * height)
-                )
-        return cls(sheet_image, width, height)
-
-    def get_frame_at(self, x: int, y: int) -> pygame.Surface:
-        try:
-            return self._tile_cache[(x, y)]
-        except KeyError:
-            pass
-        if x < 0 or y < 0:
-            not_flipped = self.get_frame_at(abs(x), abs(y))
-            frame = pygame.transform.flip(not_flipped, x < 0, y < 0)
-        elif x == 0 or y == 0:
-            raise AttributeError('Tile sheet frame coordinates must be between 1 and the sheet size')
-        else:
-            frame_width = self.sheet.get_width() // self.width
-            frame_height = self.sheet.get_height() // self.height
-            not_cropped = self.sheet.subsurface((x-1) * frame_width, (y-1) * frame_height, frame_width, frame_height)
-            frame = not_cropped.copy()
-        self._tile_cache[(x, y)] = frame
-        return frame
-
-
-@dataclass(frozen=True)
 class AnimationFrame:
     image: pygame.Surface
     duration: int
@@ -93,15 +48,6 @@ class AnimationFrame:
 @dataclass(frozen=True)
 class Animation:
     frames: Tuple[AnimationFrame]
-
-    @classmethod
-    def load_from_sprite_sheet(
-        cls, sprite_sheet: SpriteSheet, frames: Collection[Tuple[int, int], ...], duration: float
-    ) -> Animation:
-        frame_duration = int(duration * 1000.0 / len(frames))
-        return cls(
-            frames=tuple(AnimationFrame(sprite_sheet.get_frame_at(x, y), frame_duration) for x, y in frames),
-        )
 
     @classmethod
     def load_from_tmx_tile(cls, tmx_data: pytmx.TiledMap, tile_id: int) -> Animation:
@@ -123,7 +69,6 @@ class Animation:
         except StopIteration as e:
             raise KeyError(f"Animation {name} not found in TMX data") from e
         return cls.load_from_tmx_tile(tmx_data, tile_id)
-
 
 
 @dataclass()
@@ -166,50 +111,18 @@ class CharacterAnimation:
     frames: Mapping[Direction, Animation]
 
     @classmethod
-    def load_from_sprite_sheet(
-        cls,
-        sprite_sheet: SpriteSheet,
-        frames: Dict[Direction, Tuple[int, int] | Collection[Tuple[int, int] | float]],
-    ):
-        final_frames = {}
-        for direction, frame_spec in frames.items():
-            if len(frame_spec) == 2:
-                if all(isinstance(v, int) for v in frame_spec):
-                    frame_spec = [frame_spec]
-                elif any(isinstance(v, Tuple) for v in frame_spec):
-                    pass
-                else:
-                    raise AttributeError("Bad frame specification passed")
-            spec_items = [v for v in frame_spec if isinstance(v, Tuple)]
-            duration_items = [v for v in frame_spec if not isinstance(v, Tuple)]
-            if len(duration_items) > 1:
-                raise AttributeError("Bad frame specification: more then one duration value given")
-            elif not duration_items:
-                duration = 0.0
-            else:
-                duration = float(duration_items[0])
-            final_frames[direction] = Animation.load_from_sprite_sheet(sprite_sheet, spec_items, duration)
-        if Direction.IDLE not in final_frames:
-            raise AttributeError("Character animation must at least include idle frames")
-        final_frames = defaultdict(lambda: final_frames[Direction.IDLE], final_frames)
-        return cls(MappingProxyType(final_frames))
-
-    @classmethod
     def load_from_tmx_by_name(cls, tmx_data: pytmx.TiledMap, name: str):
-        return cls(MappingProxyType(defaultdict(lambda: Animation.load_from_tmx_by_name(tmx_data, name))))
-
-
-def load_hero_animation() -> CharacterAnimation:
-    return CharacterAnimation.load_from_sprite_sheet(
-        sprite_sheet=SpriteSheet.load("characters/character_femaleAdventurer_sheet.png", 9, 5, 48, 48),
-        frames={
-            Direction.IDLE: (1, 1),
-            Direction.NORTH: [(7, 4), (7, 4), (-7, 4), (-7, 4), 0.4],
-            Direction.SOUTH: [(4, 2), (5, 2), 0.4],
-            Direction.EAST: [(1, 5), (2, 5), (3, 5), (4, 5), (5, 5), (6, 5), (7, 5), (8, 5), 0.4],
-            Direction.WEST: [(-1, 5), (-2, 5), (-3, 5), (-4, 5), (-5, 5), (-6, 5), (-7, 5), (-8, 5), 0.4],
-        }
-    )
+        animations = {}
+        for direction in Direction:
+            direction_name = f"{name}.{direction.name.lower()}"
+            try:
+                animations[direction] = Animation.load_from_tmx_by_name(tmx_data, direction_name)
+            except KeyError:
+                if direction == Direction.IDLE:
+                    animations[direction] = Animation.load_from_tmx_by_name(tmx_data, name)
+                else:
+                    pass
+        return cls(MappingProxyType(defaultdict(lambda: animations[Direction.IDLE], animations)))
 
 
 class MapObject(metaclass=ABCMeta):
@@ -362,9 +275,6 @@ class EscapingEntity(AnimatedEntity, metaclass=ABCMeta):
 
 
 class Hero(OnGroundEntity, EscapingEntity):
-    def __init__(self, game: QuestGame):
-        super().__init__(load_hero_animation(), game)
-
     def on_exit_world(self, game: QuestGame) -> None:
         self.move_back()
 
@@ -372,13 +282,15 @@ class Hero(OnGroundEntity, EscapingEntity):
 class CollectibleBalloons(OnGroundEntity, TouchableEntity, SpawnableEntity):
     @classmethod
     def spawn(cls, location: Tuple[int, int], game: QuestGame) -> SpawnableEntity:
-        balloons = game.make_animated_entity(cls, "balloons-on-ground")
+        balloons = game.make_animated_entity(cls, "collectibles.balloons-on-ground")
         balloons.position = location
         return balloons
 
     def on_hero_touch(self, hero: Hero, game: QuestGame) -> None:
         self.kill()
-        animations = ["balloons-red-fly", "balloons-green-fly", "balloons-blue-fly"]
+        animations = [
+            "collectibles.balloons-red-fly", "collectibles.balloons-green-fly", "collectibles.balloons-blue-fly"
+        ]
         velocities = [[0, -60], [-16, -58], [16, -58]]
         for animation, velocity in zip(animations, velocities):
             flying_balloon = game.make_animated_entity(FlyingBalloon, animation)
@@ -464,7 +376,7 @@ class QuestGame:
                 continue
             MapObject.create_from_map_object(obj, self)
 
-        self.hero = Hero(self)
+        self.hero = self.make_animated_entity(Hero, "hero")
         self.hero.position = self.world_rect.center
 
     def make_animated_entity(self, ent_class: Type[AnimatedEntityType], animation_name: str) -> AnimatedEntityType:
