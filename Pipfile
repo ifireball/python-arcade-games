@@ -10,6 +10,7 @@ pyscroll = "*"
 toml = "*"
 
 [dev-packages]
+rich = "*"
 
 [requires]
 python_version = "3.9"
