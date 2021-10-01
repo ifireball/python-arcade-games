@@ -17,3 +17,48 @@ duration = 800
 [collectibles.animations.balloons-blue-fly]
 from = ["balloon-blue-fly[0-9]*.png"]
 duration = 800
+
+[hero.animations.idle]
+from = ["lpc-hero.png"]
+duration = 900
+
+[hero.animations.idle.slice_frames]
+slice_width = 64
+slice_height = 64
+pick_slices = [[0, 10]]
+
+[hero.animations.north]
+from = ["lpc-hero.png"]
+duration = 800
+
+[hero.animations.north.slice_frames]
+slice_width = 64
+slice_height = 64
+pick_slices = [[1, 8], [2, 8], [3, 8], [4, 8], [5, 8], [6, 8], [7, 8], [8, 8]]
+
+[hero.animations.west]
+from = ["lpc-hero.png"]
+duration = 800
+
+[hero.animations.west.slice_frames]
+slice_width = 64
+slice_height = 64
+pick_slices = [[1, 9], [2, 9], [3, 9], [4, 9], [5, 9], [6, 9], [7, 9], [8, 9]]
+
+[hero.animations.south]
+from = ["lpc-hero.png"]
+duration = 800
+
+[hero.animations.south.slice_frames]
+slice_width = 64
+slice_height = 64
+pick_slices = [[1, 10], [2, 10], [3, 10], [4, 10], [5, 10], [6, 10], [7, 10], [8, 10]]
+
+[hero.animations.east]
+from = ["lpc-hero.png"]
+duration = 800
+
+[hero.animations.east.slice_frames]
+slice_width = 64
+slice_height = 64
+pick_slices = [[1, 11], [2, 11], [3, 11], [4, 11], [5, 11], [6, 11], [7, 11], [8, 11]]

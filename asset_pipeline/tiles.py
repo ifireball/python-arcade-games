@@ -10,7 +10,7 @@ from xml.etree.ElementTree import Element, ElementTree, SubElement, indent
 import pygame
 from rich import print
 
-from .animation import OptimizedAnimationInfo, TileAnimationFrame
+from .animation import AnimationFrames, OptimizedAnimationInfo, TileAnimationFrame
 from .configuration import AnimationConfiguration, TilesetConfiguration
 from .image_set import ImageSet
 
@@ -61,6 +61,7 @@ class TileSet:
                 tile_id = next(frame.tile_id for frame in anim.frames if frame.tile_id not in used_tile_ids)
             except StopIteration:
                 images, tile_id = images.with_image_added(images.images[anim.frames[0].tile_id])
+            used_tile_ids.add(tile_id)
             tile = AnimatedTile(
                 id=tile_id,
                 properties={
@@ -76,16 +77,11 @@ class TileSet:
     def load_and_optimize_animation(
         cls, name: str, animation_cfg: AnimationConfiguration, images: ImageSet, input_path: Path
     ) -> Tuple[OptimizedAnimationInfo, ImageSet]:
+        animation_frames = AnimationFrames.from_configuration(name, animation_cfg, input_path)
         optimized_animation = OptimizedAnimationInfo(name, game_class=animation_cfg.game_class)
-        frame_files = \
-            list(chain.from_iterable(
-                sorted(input_path.glob(pattern)) for pattern in animation_cfg.source_file_patterns
-            ))
-        print(f"Making animation: {name} from files: {[f.name for f in frame_files]}")
-        frame_duration: int = animation_cfg.duration // len(frame_files)
-        for frame_file in frame_files:
-            image = pygame.image.load(frame_file)
-            images, tile_id = images.with_image(image)
+        frame_duration: int = animation_frames.frame_duration
+        for frame_image in animation_frames:
+            images, tile_id = images.with_image(frame_image)
             optimized_animation = optimized_animation.with_appended_frame(tile_id, frame_duration)
         return optimized_animation, images
 
