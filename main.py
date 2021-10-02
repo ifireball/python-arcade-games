@@ -274,7 +274,14 @@ class EscapingEntity(AnimatedEntity, metaclass=ABCMeta):
         game.set_world_escaping_entity(self)
 
 
-class Hero(OnGroundEntity, EscapingEntity):
+class Hero(OnGroundEntity, EscapingEntity, MapObject):
+    @classmethod
+    def create_from_map_object(cls, obj: pytmx.TiledObject, game: QuestGame) -> None:
+        if game.hero:
+            raise ValueError("More then one Hero starting point found on map")
+        game.hero = game.make_animated_entity(Hero, "hero")
+        game.hero.position = (obj.x, obj.y)
+
     def on_exit_world(self, game: QuestGame) -> None:
         self.move_back()
 
@@ -353,7 +360,7 @@ class QuestGame:
         self.running: bool = False
         self.screen = screen
 
-        self.tmx_data = tmx_data = load_map("grasslands.tmx")
+        self.tmx_data = tmx_data = load_map("fields.tmx")
         map_data = pyscroll.data.TiledMapData(tmx_data)
 
         self.map_layer = pyscroll.BufferedRenderer(map_data, screen.surface.get_size(), clamp_camera=True)
@@ -361,6 +368,7 @@ class QuestGame:
         self.touchable = pygame.sprite.Group()
         self.world_escaping = pygame.sprite.Group()
         self.invisible = pygame.sprite.Group()
+        self.hero = None
 
         self.walls = [
             pygame.Rect(wall.x, wall.y, wall.width, wall.height)
@@ -376,8 +384,7 @@ class QuestGame:
                 continue
             MapObject.create_from_map_object(obj, self)
 
-        self.hero = self.make_animated_entity(Hero, "hero")
-        self.hero.position = self.world_rect.center
+
 
     def make_animated_entity(self, ent_class: Type[AnimatedEntityType], animation_name: str) -> AnimatedEntityType:
         return ent_class(CharacterAnimation.load_from_tmx_by_name(self.tmx_data, animation_name), self)
@@ -471,7 +478,7 @@ class QuestGame:
 
 
 class Screen:
-    def __init__(self, width: int = 512) -> None:
+    def __init__(self, width: int = 768) -> None:
         display_info = pygame.display.Info()
         self.width, self.height = width, width * display_info.current_h // display_info.current_w
         print(f"Set display size to {(self.width, self.height)}")
