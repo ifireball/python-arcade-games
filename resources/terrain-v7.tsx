@@ -6,6 +6,90 @@
  <tile id="388" probability="15"/>
  <tile id="389" probability="25"/>
  <tile id="421" probability="5"/>
+ <tile id="451">
+  <animation>
+   <frame tileid="451" duration="500"/>
+   <frame tileid="1443" duration="500"/>
+  </animation>
+ </tile>
+ <tile id="452">
+  <animation>
+   <frame tileid="452" duration="500"/>
+   <frame tileid="1444" duration="500"/>
+  </animation>
+ </tile>
+ <tile id="453">
+  <animation>
+   <frame tileid="453" duration="500"/>
+   <frame tileid="1445" duration="500"/>
+  </animation>
+ </tile>
+ <tile id="483">
+  <animation>
+   <frame tileid="483" duration="500"/>
+   <frame tileid="1475" duration="500"/>
+  </animation>
+ </tile>
+ <tile id="484">
+  <animation>
+   <frame tileid="484" duration="500"/>
+   <frame tileid="1476" duration="500"/>
+  </animation>
+ </tile>
+ <tile id="485">
+  <animation>
+   <frame tileid="485" duration="500"/>
+   <frame tileid="1477" duration="500"/>
+  </animation>
+ </tile>
+ <tile id="515">
+  <animation>
+   <frame tileid="515" duration="500"/>
+   <frame tileid="1507" duration="500"/>
+  </animation>
+ </tile>
+ <tile id="516">
+  <animation>
+   <frame tileid="516" duration="500"/>
+   <frame tileid="1508" duration="500"/>
+  </animation>
+ </tile>
+ <tile id="517">
+  <animation>
+   <frame tileid="517" duration="500"/>
+   <frame tileid="1509" duration="500"/>
+  </animation>
+ </tile>
+ <tile id="547">
+  <animation>
+   <frame tileid="547" duration="500"/>
+   <frame tileid="1539" duration="500"/>
+  </animation>
+ </tile>
+ <tile id="549">
+  <animation>
+   <frame tileid="549" duration="500"/>
+   <frame tileid="1541" duration="500"/>
+  </animation>
+ </tile>
+ <tile id="579">
+  <animation>
+   <frame tileid="579" duration="500"/>
+   <frame tileid="1571" duration="500"/>
+  </animation>
+ </tile>
+ <tile id="580">
+  <animation>
+   <frame tileid="580" duration="500"/>
+   <frame tileid="1572" duration="500"/>
+  </animation>
+ </tile>
+ <tile id="581">
+  <animation>
+   <frame tileid="581" duration="500"/>
+   <frame tileid="1573" duration="500"/>
+  </animation>
+ </tile>
  <tile id="608">
   <animation>
    <frame tileid="608" duration="500"/>
@@ -22,6 +106,24 @@
   <animation>
    <frame tileid="610" duration="500"/>
    <frame tileid="1928" duration="500"/>
+  </animation>
+ </tile>
+ <tile id="611">
+  <animation>
+   <frame tileid="611" duration="500"/>
+   <frame tileid="1603" duration="500"/>
+  </animation>
+ </tile>
+ <tile id="612">
+  <animation>
+   <frame tileid="612" duration="500"/>
+   <frame tileid="1604" duration="500"/>
+  </animation>
+ </tile>
+ <tile id="613">
+  <animation>
+   <frame tileid="613" duration="500"/>
+   <frame tileid="1605" duration="500"/>
   </animation>
  </tile>
  <tile id="867">
@@ -998,6 +1100,12 @@
    <wangtile tileid="1433" wangid="0,20,0,11,0,20,0,11"/>
    <wangtile tileid="1435" wangid="0,13,0,20,0,13,0,20"/>
    <wangtile tileid="1436" wangid="0,20,0,13,0,20,0,13"/>
+  </wangset>
+  <wangset name="Bridges" type="edge" tile="-1">
+   <wangcolor name="Good bridge vertical" color="#ff0000" tile="-1" probability="1"/>
+   <wangtile tileid="1511" wangid="0,0,0,0,1,0,0,0"/>
+   <wangtile tileid="1543" wangid="1,0,0,0,1,0,0,0"/>
+   <wangtile tileid="1575" wangid="1,0,0,0,0,0,0,0"/>
   </wangset>
  </wangsets>
 </tileset>
