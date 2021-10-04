@@ -15,6 +15,9 @@ import pygame
 import pyscroll.data
 import pytmx
 
+from game.controls import Controls
+
+
 HERO_MOVE_SPEED = 200.0
 
 MAP_SPRITES_LAYER = "sprites"
@@ -352,6 +355,22 @@ class Spawner(Entity, MapObject):
         print(f"{self} at {self.rect}: spawned {obj} as {location}")
 
 
+class HudElement(Entity, MapObject):
+    def __init__(self, rect: pygame.Rect, image: pygame.Surface, game: QuestGame):
+        super().__init__(game)
+        self.rect = rect
+        self.image = image
+        game.add_hud_element(self)
+
+    @classmethod
+    def create_from_map_object(cls, obj: pytmx.TiledObject, game: QuestGame) -> None:
+        cls(pygame.Rect(obj.x, obj.y, obj.width, obj.height), obj.image, game)
+
+    def update(self, dt: int, game: QuestGame) -> None:
+        pass
+
+
+
 AnimatedEntityType = TypeVar("AnimatedEntityType", bound=AnimatedEntity)
 
 
@@ -359,6 +378,7 @@ class QuestGame:
     def __init__(self, screen: Screen) -> None:
         self.running: bool = False
         self.screen = screen
+        self.controls = Controls()
 
         self.tmx_data = tmx_data = load_map("fields.tmx")
         map_data = pyscroll.data.TiledMapData(tmx_data)
@@ -369,6 +389,7 @@ class QuestGame:
         self.world_escaping = pygame.sprite.Group()
         self.invisible = pygame.sprite.Group()
         self.hero = None
+        self.hud_elements = pygame.sprite.Group()
 
         self.walls = [
             pygame.Rect(wall.x, wall.y, wall.width, wall.height)
@@ -385,6 +406,9 @@ class QuestGame:
             MapObject.create_from_map_object(obj, self)
 
 
+    def add_hud_element(self, elm: HudElement):
+        self.hud_elements.add(elm)
+        self.invisible.remove(elm)
 
     def make_animated_entity(self, ent_class: Type[AnimatedEntityType], animation_name: str) -> AnimatedEntityType:
         return ent_class(CharacterAnimation.load_from_tmx_by_name(self.tmx_data, animation_name), self)
@@ -408,12 +432,15 @@ class QuestGame:
         self.invisible.add(ent)
 
     def draw(self, surface: pygame.Surface) -> None:
-        self.layered_draw_group.center(self.hero.rect.center)
+        self.layered_draw_group.center((self.hero.rect.center[0], self.hero.rect.center[1] + 32))
         self.layered_draw_group.draw(surface)
+        self.hud_elements.draw(surface)
 
     def handle_input(self) -> None:
         for event in pygame.event.get():
-            if event.type == pygame.QUIT:
+            if self.controls.handle_events(event):
+                pass
+            elif event.type == pygame.QUIT:
                 self.running = False
                 break
             elif event.type == pygame.KEYDOWN:
@@ -422,19 +449,21 @@ class QuestGame:
                     break
             self.screen.handle_events(event, resize_callback=self.map_layer.set_size)
 
-        pressed = pygame.key.get_pressed()
-        if pressed[pygame.K_UP]:
+        if self.controls.up_pressed:
             self.hero.velocity[1] = -HERO_MOVE_SPEED
-        elif pressed[pygame.K_DOWN]:
+        elif self.controls.down_pressed:
             self.hero.velocity[1] = HERO_MOVE_SPEED
         else:
             self.hero.velocity[1] = 0
-        if pressed[pygame.K_LEFT]:
+        if self.controls.left_pressed:
             self.hero.velocity[0] = -HERO_MOVE_SPEED
-        elif pressed[pygame.K_RIGHT]:
+        elif self.controls.right_pressed:
             self.hero.velocity[0] = HERO_MOVE_SPEED
         else:
             self.hero.velocity[0] = 0
+        if self.controls.speedup_pressed:
+            self.hero.velocity[0] *= 2
+            self.hero.velocity[1] *= 2
 
     @property
     def visible_rect(self) -> pygame.Rect:
