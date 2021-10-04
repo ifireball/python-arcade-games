@@ -131,6 +131,70 @@
    <frame tileid="867" duration="500"/>
   </animation>
  </tile>
+ <tile id="1459">
+  <animation>
+   <frame tileid="1459" duration="250"/>
+   <frame tileid="1463" duration="250"/>
+   <frame tileid="1555" duration="250"/>
+   <frame tileid="1559" duration="250"/>
+  </animation>
+ </tile>
+ <tile id="1460">
+  <animation>
+   <frame tileid="1460" duration="250"/>
+   <frame tileid="1464" duration="250"/>
+   <frame tileid="1556" duration="250"/>
+   <frame tileid="1560" duration="250"/>
+  </animation>
+ </tile>
+ <tile id="1491">
+  <animation>
+   <frame tileid="1491" duration="250"/>
+   <frame tileid="1495" duration="250"/>
+   <frame tileid="1587" duration="250"/>
+   <frame tileid="1591" duration="250"/>
+  </animation>
+ </tile>
+ <tile id="1492">
+  <animation>
+   <frame tileid="1492" duration="250"/>
+   <frame tileid="1496" duration="250"/>
+   <frame tileid="1588" duration="250"/>
+   <frame tileid="1592" duration="250"/>
+  </animation>
+ </tile>
+ <tile id="1522">
+  <animation>
+   <frame tileid="1522" duration="250"/>
+   <frame tileid="1526" duration="250"/>
+   <frame tileid="1618" duration="250"/>
+   <frame tileid="1622" duration="250"/>
+  </animation>
+ </tile>
+ <tile id="1523">
+  <animation>
+   <frame tileid="1523" duration="250"/>
+   <frame tileid="1527" duration="250"/>
+   <frame tileid="1619" duration="250"/>
+   <frame tileid="1623" duration="250"/>
+  </animation>
+ </tile>
+ <tile id="1524">
+  <animation>
+   <frame tileid="1524" duration="250"/>
+   <frame tileid="1528" duration="250"/>
+   <frame tileid="1620" duration="250"/>
+   <frame tileid="1624" duration="250"/>
+  </animation>
+ </tile>
+ <tile id="1525">
+  <animation>
+   <frame tileid="1525" duration="250"/>
+   <frame tileid="1529" duration="250"/>
+   <frame tileid="1621" duration="250"/>
+   <frame tileid="1625" duration="250"/>
+  </animation>
+ </tile>
  <wangsets>
   <wangset name="Terrains" type="corner" tile="-1">
    <wangcolor name="Dirt_Tan" color="#ff0000" tile="97" probability="1"/>
