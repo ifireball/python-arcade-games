@@ -138,9 +138,11 @@ class MapObject(metaclass=ABCMeta):
 
     @classmethod
     @abstractmethod
-    def create_from_map_object(cls, obj: pytmx.TiledObject, game: QuestGame) -> None:
-        obj_type = obj.type or obj.properties.get("type")
-        MapObject.__known_classes[obj_type].create_from_map_object(obj, game)
+    def create_from_map_object(cls, group: pytmx.TiledObjectGroup, obj: pytmx.TiledObject, game: QuestGame) -> None:
+        obj_type = obj.type or obj.properties.get("type") or group.properties.get("default_type")
+        if not obj_type:
+            return
+        MapObject.__known_classes[obj_type].create_from_map_object(group, obj, game)
 
 
 class Entity(pygame.sprite.Sprite, metaclass=ABCMeta):
@@ -244,7 +246,7 @@ class SpawnableEntity(AnimatedEntity, MapObject, metaclass=ABCMeta):
         return SpawnableEntity.__known_classes[obj_class].spawn(location, game)
 
     @classmethod
-    def create_from_map_object(cls, obj: pytmx.TiledObject, game: QuestGame) -> None:
+    def create_from_map_object(cls, group: pytmx.TiledObjectGroup, obj: pytmx.TiledObject, game: QuestGame) -> None:
         obj_type = obj.type or obj.properties.get("type")
         SpawnableEntity.spawn_by_class(obj_type, (obj.x, obj.y), game)
 
@@ -279,7 +281,7 @@ class EscapingEntity(AnimatedEntity, metaclass=ABCMeta):
 
 class Hero(OnGroundEntity, EscapingEntity, MapObject):
     @classmethod
-    def create_from_map_object(cls, obj: pytmx.TiledObject, game: QuestGame) -> None:
+    def create_from_map_object(cls, group: pytmx.TiledObjectGroup, obj: pytmx.TiledObject, game: QuestGame) -> None:
         if game.hero:
             raise ValueError("More then one Hero starting point found on map")
         game.hero = game.make_animated_entity(Hero, "hero")
@@ -326,7 +328,7 @@ class Spawner(Entity, MapObject):
     MAP_CONFIGURABLE_INT_ATTRS = ("spawn_timeout_min", "spawn_timeout_max", "spawn_max")
 
     @classmethod
-    def create_from_map_object(cls, obj: pytmx.TiledObject, game: QuestGame) -> None:
+    def create_from_map_object(cls, group: pytmx.TiledObjectGroup, obj: pytmx.TiledObject, game: QuestGame) -> None:
         instance = cls(game)
         instance.rect = pygame.Rect(obj.x, obj.y, obj.width, obj.height)
         for attr in cls.MAP_CONFIGURABLE_INT_ATTRS:
@@ -363,12 +365,24 @@ class HudElement(Entity, MapObject):
         game.add_hud_element(self)
 
     @classmethod
-    def create_from_map_object(cls, obj: pytmx.TiledObject, game: QuestGame) -> None:
+    def create_from_map_object(cls, group: pytmx.TiledObjectGroup, obj: pytmx.TiledObject, game: QuestGame) -> None:
         cls(pygame.Rect(obj.x, obj.y, obj.width, obj.height), obj.image, game)
 
     def update(self, dt: int, game: QuestGame) -> None:
         pass
 
+
+class Wall(Entity, MapObject):
+    def update(self, dt: int, game: QuestGame) -> None:
+        pass
+
+    @classmethod
+    def create_from_map_object(cls, group: pytmx.TiledObjectGroup, obj: pytmx.TiledObject, game: QuestGame) -> None:
+        game.wall_rects.append(pygame.Rect(obj.x, obj.y, obj.width, obj.height))
+
+
+class PolyWall(Wall):
+    pass
 
 
 AnimatedEntityType = TypeVar("AnimatedEntityType", bound=AnimatedEntity)
@@ -391,19 +405,19 @@ class QuestGame:
         self.hero = None
         self.hud_elements = pygame.sprite.Group()
 
-        self.walls = [
-            pygame.Rect(wall.x, wall.y, wall.width, wall.height)
-            for wall in tmx_data.layernames.get(MAP_WALLS_LAYER, [])
-        ]
+        self.wall_rects = []
+        # self.walls = [
+        #     pygame.Rect(wall.x, wall.y, wall.width, wall.height)
+        #     for wall in tmx_data.layernames.get(MAP_WALLS_LAYER, [])
+        # ]
         self.world_rect = self.map_layer.map_rect
         self.sprite_layer_number = \
             next((idx for idx, layer in enumerate(tmx_data.layers) if layer.name == MAP_SPRITES_LAYER), 0)
         self.topmost_layer_number = max(layer.id for layer in tmx_data.layers) - 1
 
-        for obj in tmx_data.objects:
-            if not obj.type and "type" not in obj.properties:
-                continue
-            MapObject.create_from_map_object(obj, self)
+        for group in tmx_data.objectgroups:
+            for obj in group:
+                MapObject.create_from_map_object(group, obj, self)
 
 
     def add_hud_element(self, elm: HudElement):
@@ -472,7 +486,7 @@ class QuestGame:
     def update(self, dt: int) -> None:
         self.invisible.update(dt, self)
         self.layered_draw_group.update(dt, self)
-        if self.hero.feet.collidelist(self.walls) >= 0:
+        if self.hero.feet.collidelist(self.wall_rects) >= 0:
             self.hero.move_back()
         # print(self.hero.feet, self.world_rect)
         for ent in self.world_escaping:

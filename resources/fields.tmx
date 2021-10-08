@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<map version="1.5" tiledversion="1.7.2" orientation="orthogonal" renderorder="right-down" width="256" height="256" tilewidth="32" tileheight="32" infinite="0" nextlayerid="25" nextobjectid="104">
+<map version="1.5" tiledversion="1.7.2" orientation="orthogonal" renderorder="right-down" width="256" height="256" tilewidth="32" tileheight="32" infinite="0" nextlayerid="25" nextobjectid="105">
  <tileset firstgid="1" source="terrain-v7.tsx"/>
  <tileset firstgid="2049" source="collectibles.tsx"/>
  <tileset firstgid="2091" source="hero.tsx"/>
@@ -22,7 +22,7 @@
  </layer>
  <layer id="3" name="Rivers" width="256" height="256">
   <data encoding="base64" compression="zlib">
-   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
+   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
   </data>
  </layer>
  <layer id="24" name="Mountains0" width="256" height="256">
@@ -70,7 +70,7 @@
    eJzt3DEKwzAMBVB57RDwEQqdeqk0N0rphZshY2mGNih23gPhxcNfDEYIRQAAAAB8N9eI51Kvmp0EAAAAAH53zw4ApLpkBziocYh4rDUN2WkAAAAAAGBbyQ4AAAAAAAAAAAAAAAA0a7RvB07vVj/v3rKTCwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA2lLW85qaAtjLv9922b4CdMYfAQAAAAD6oMcPAAAAAO0yywfno68PAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAANC/NxZtCN8=
   </data>
  </layer>
- <objectgroup id="5" name="sprites" visible="0">
+ <objectgroup id="5" name="sprites">
   <object id="1" type="Spawner" x="6288" y="1541" width="1859" height="6624">
    <properties>
     <property name="spawn_max" type="int" value="10"/>
@@ -114,6 +114,9 @@
   </data>
  </layer>
  <objectgroup id="7" name="walls">
+  <properties>
+   <property name="default_type" value="Wall"/>
+  </properties>
   <object id="18" x="0" y="160" width="383" height="1568"/>
   <object id="19" x="0" y="1726" width="448" height="356"/>
   <object id="21" x="0" y="2080" width="384" height="864"/>
@@ -182,6 +185,9 @@
   <object id="100" x="7752" y="904" width="8" height="24"/>
   <object id="102" x="7792" y="808" width="24" height="64"/>
   <object id="103" x="7992" y="808" width="24" height="64"/>
+  <object id="104" name="poly1" type="PolyWall" x="2088" y="5376">
+   <polygon points="0,0 8,-16 24,-24 32,-24 32,-32 40,-40 40,-48 56,-56 64,-56 96,-56 112,-32 104,-24 128,-24 144,0 136,8 144,24 136,40 144,48 128,56 120,48 112,56 104,72 96,80 48,80 32,56 16,40 0,32 8,16"/>
+  </object>
  </objectgroup>
  <objectgroup id="6" name="sky sprites"/>
  <objectgroup id="21" name="controls" visible="0">
