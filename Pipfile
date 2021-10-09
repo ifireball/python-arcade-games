@@ -8,6 +8,7 @@ pygame = "*"
 pytmx = "*"
 pyscroll = "*"
 toml = "*"
+pymunk = "*"
 
 [dev-packages]
 rich = "*"

@@ -12,6 +12,9 @@ from types import MappingProxyType
 from typing import Any, Callable, Collection, Dict, Mapping, MutableMapping, Sequence, Tuple, Type, TypeVar
 
 import pygame
+import pymunk
+import pymunk.pygame_util
+import pymunk.autogeometry
 import pyscroll.data
 import pytmx
 
@@ -40,6 +43,20 @@ class Direction(IntEnum):
     SOUTH = 2
     EAST = 3
     WEST = 4
+
+    @classmethod
+    def from_vector(cls, vx: float, vy: float, tolerance: float = 10.0) -> Direction:
+        if vx < -tolerance:
+            direction = Direction.WEST
+        elif vx > tolerance:
+            direction = Direction.EAST
+        elif vy < -tolerance:
+            direction = Direction.NORTH
+        elif vy > tolerance:
+            direction = Direction.SOUTH
+        else:
+            direction = Direction.IDLE
+        return direction
 
 
 @dataclass(frozen=True)
@@ -163,7 +180,7 @@ class AnimatedEntity(Entity):
         self.direction = Direction.IDLE
         self.animation_player = AnimationPlayer(self.animation.frames[self.direction])
         self.image = self.animation_player.current_frame
-        self.velocity = [0.0, 0.0]
+        self._velocity = [0.0, 0.0]
         self._position = [0.0, 0.0]
         self._old_position = [0.0, 0.0]
         self.rect = self.image.get_rect()
@@ -186,30 +203,36 @@ class AnimatedEntity(Entity):
         self.rect.midbottom = value
         self.position = self.rect.topleft
 
+    @property
+    def velocity(self) -> Tuple[float, float]:
+        return self._velocity[0], self._velocity[1]
+
+    @velocity.setter
+    def velocity(self, value: Sequence[float]) -> None:
+        self._velocity = [value[0], value[1]]
+
     def update(self, dt: int, game: QuestGame) -> None:
-        self._old_position = self._position[:]
-        self._position[0] += self.velocity[0] * dt / 1000.0
-        self._position[1] += self.velocity[1] * dt / 1000.0
-        self.rect.topleft = self._position
-        self.feet.midbottom = self.rect.midbottom
+        self.update_position(dt)
+        self.update_image(dt)
 
-        if self.velocity[0] < 0:
-            new_direction = Direction.WEST
-        elif self.velocity[0] > 0:
-            new_direction = Direction.EAST
-        elif self.velocity[1] < 0:
-            new_direction = Direction.NORTH
-        elif self.velocity[1] > 0:
-            new_direction = Direction.SOUTH
-        else:
-            new_direction = Direction.IDLE
-
+    def update_image(self, dt) -> None:
+        new_direction = self.calculate_animation_direction()
         if self.direction == new_direction:
             self.animation_player.update(dt)
         else:
             self.direction = new_direction
             self.animation_player.animation = self.animation.frames[self.direction]
         self.image = self.animation_player.current_frame
+
+    def calculate_animation_direction(self) -> Direction:
+        return Direction.from_vector(*self.velocity)
+
+    def update_position(self, dt) -> None:
+        self._old_position = self._position[:]
+        self._position[0] += self.velocity[0] * dt / 1000.0
+        self._position[1] += self.velocity[1] * dt / 1000.0
+        self.rect.topleft = self._position
+        self.feet.midbottom = self.rect.midbottom
 
     def move_back(self) -> None:
         """Called after update() to cancel motion"""
@@ -279,16 +302,93 @@ class EscapingEntity(AnimatedEntity, metaclass=ABCMeta):
         game.set_world_escaping_entity(self)
 
 
-class Hero(OnGroundEntity, EscapingEntity, MapObject):
+class Hero(OnGroundEntity, MapObject):
     @classmethod
     def create_from_map_object(cls, group: pytmx.TiledObjectGroup, obj: pytmx.TiledObject, game: QuestGame) -> None:
         if game.hero:
             raise ValueError("More then one Hero starting point found on map")
         game.hero = game.make_animated_entity(Hero, "hero")
-        game.hero.position = (obj.x, obj.y)
+        game.hero.topleft = (obj.x, obj.y)
 
-    def on_exit_world(self, game: QuestGame) -> None:
-        self.move_back()
+    def __init__(self, animation: CharacterAnimation, game: QuestGame) -> None:
+        super().__init__(animation, game)
+        self.pymunk_body = pymunk.Body()
+        pymunk_shape = pymunk.Circle(self.pymunk_body, 10.0)
+        pymunk_shape.mass = 1.0
+        pymunk_shape.friction = 0.5
+        pymunk_shape.color = pygame.Color("pink")
+        pymunk_shape.elasticity = 0.1
+        game.pymunk_space.add(
+            self.pymunk_body,
+            pymunk_shape,
+        )
+
+    @property
+    def topleft(self) -> Tuple[float, float]:
+        return tuple(self.rect.topleft)
+
+    @topleft.setter
+    def topleft(self, value: Sequence[float]):
+        self.rect.topleft = value[0], value[1]
+        self.position = self.rect.midbottom[0], self.rect.midbottom[1] - 10.0
+
+    @property
+    def position(self) -> Tuple[float, float]:
+        return self.pymunk_body.position
+
+    @position.setter
+    def position(self, value: Sequence[float]) -> None:
+        self.pymunk_body.position = value
+        # self.pymunk_control_body.position = self.pymunk_body.position
+        print(f"hero.pymunk_body at: {self.pymunk_body.position} v={self.pymunk_body.velocity} ({self.pymunk_body})")
+
+    @property
+    def velocity(self) -> Tuple[float, float]:
+        return self.pymunk_body.velocity
+
+    @velocity.setter
+    def velocity(self, value: Sequence[float]) -> None:
+        self.pymunk_body.velocity = value[0], value[1]
+
+    def update_position(self, dt) -> None:
+        self.rect.midbottom = self.position[0], self.position[1] + 10.0
+        self.feet.midbottom = self.rect.midbottom
+
+    def move_back(self) -> None:
+        pass
+
+    def apply_controls(self, controls: Controls) -> None:
+        if controls.speedup_pressed:
+            max_velocity = 500.0
+        else:
+            max_velocity = 250.0
+        current_velocity = self.pymunk_body.velocity
+        if current_velocity.length > max_velocity:
+            self.pymunk_body.force = current_velocity * -10.0
+            return
+        if controls.up_pressed:
+            if controls.left_pressed:
+                angle = 135.0
+            elif controls.right_pressed:
+                angle = 225.0
+            else:
+                angle = 180.0
+        elif controls.down_pressed:
+            if controls.left_pressed:
+                angle = 45.0
+            elif controls.right_pressed:
+                angle = -45.0
+            else:
+                angle = 0.0
+        elif controls.left_pressed:
+            angle = 90.0
+        elif controls.right_pressed:
+            angle = -90.0
+        else:
+            self.pymunk_body.force = current_velocity * -10.0
+            return
+        control_force = pymunk.Vec2d(0.0, 500.0).rotated_degrees(angle)
+        self.pymunk_body.force = control_force
 
 
 class CollectibleBalloons(OnGroundEntity, TouchableEntity, SpawnableEntity):
@@ -377,12 +477,38 @@ class Wall(Entity, MapObject):
         pass
 
     @classmethod
+    def create_pymunk_shapes(
+        cls, group: pytmx.TiledObjectGroup, obj: pytmx.TiledObject, game: QuestGame
+    ) -> Sequence[pymunk.Shape]:
+        source_points = obj.points if hasattr(obj, "points") else obj.as_points
+        if not pymunk.autogeometry.is_closed(source_points):
+            source_points = source_points + source_points[:1]
+        point_sets = pymunk.autogeometry.convex_decomposition(source_points, 5.0)
+        shapes = []
+        for point_set in point_sets:
+            shape = pymunk.Poly(body=game.pymunk_space.static_body, vertices=point_set)
+            shape.elasticity = 0.0
+            shape.friction = 0.5
+            shade = randrange(96, 224)
+            shape.color = pygame.Color(shade, shade, shade, 127)
+            game.pymunk_space.add(shape)
+            shapes.append(shape)
+        return shapes
+
+    @classmethod
     def create_from_map_object(cls, group: pytmx.TiledObjectGroup, obj: pytmx.TiledObject, game: QuestGame) -> None:
-        game.wall_rects.append(pygame.Rect(obj.x, obj.y, obj.width, obj.height))
+        cls.create_pymunk_shapes(group, obj, game)
 
 
 class PolyWall(Wall):
-    pass
+    @classmethod
+    def create_pymunk_shapes(
+        cls, group: pytmx.TiledObjectGroup, obj: pytmx.TiledObject, game: QuestGame
+    ) -> Sequence[pymunk.Shape]:
+        shapes = super().create_pymunk_shapes(group, obj, game)
+        for shape in shapes:
+            shape.elasticity = 7.5
+        return shapes
 
 
 AnimatedEntityType = TypeVar("AnimatedEntityType", bound=AnimatedEntity)
@@ -405,11 +531,10 @@ class QuestGame:
         self.hero = None
         self.hud_elements = pygame.sprite.Group()
 
-        self.wall_rects = []
-        # self.walls = [
-        #     pygame.Rect(wall.x, wall.y, wall.width, wall.height)
-        #     for wall in tmx_data.layernames.get(MAP_WALLS_LAYER, [])
-        # ]
+        self.pymunk_space = pymunk.Space()
+        self.pymunk_draw_options = pymunk.pygame_util.DrawOptions(self.screen.surface)
+        self.debug_draw = False
+
         self.world_rect = self.map_layer.map_rect
         self.sprite_layer_number = \
             next((idx for idx, layer in enumerate(tmx_data.layers) if layer.name == MAP_SPRITES_LAYER), 0)
@@ -448,6 +573,11 @@ class QuestGame:
     def draw(self, surface: pygame.Surface) -> None:
         self.layered_draw_group.center((self.hero.rect.center[0], self.hero.rect.center[1] + 32))
         self.layered_draw_group.draw(surface)
+        if self.debug_draw:
+            view_vec = pymunk.Vec2d(*self.map_layer.view_rect.topleft) * -1
+            transform = pymunk.Transform.translation(*view_vec)
+            self.pymunk_draw_options.transform = transform
+            self.pymunk_space.debug_draw(self.pymunk_draw_options)
         self.hud_elements.draw(surface)
 
     def handle_input(self) -> None:
@@ -457,27 +587,23 @@ class QuestGame:
             elif event.type == pygame.QUIT:
                 self.running = False
                 break
-            elif event.type == pygame.KEYDOWN:
+            elif event.type == pygame.KEYUP:
                 if event.key == pygame.K_ESCAPE:
                     self.running = False
                     break
+                elif event.key == pygame.K_d:
+                    self.debug_draw = not self.debug_draw
+                    self.debug_dump()
             self.screen.handle_events(event, resize_callback=self.map_layer.set_size)
 
-        if self.controls.up_pressed:
-            self.hero.velocity[1] = -HERO_MOVE_SPEED
-        elif self.controls.down_pressed:
-            self.hero.velocity[1] = HERO_MOVE_SPEED
-        else:
-            self.hero.velocity[1] = 0
-        if self.controls.left_pressed:
-            self.hero.velocity[0] = -HERO_MOVE_SPEED
-        elif self.controls.right_pressed:
-            self.hero.velocity[0] = HERO_MOVE_SPEED
-        else:
-            self.hero.velocity[0] = 0
-        if self.controls.speedup_pressed:
-            self.hero.velocity[0] *= 2
-            self.hero.velocity[1] *= 2
+        self.hero.apply_controls(self.controls)
+
+    def debug_dump(self):
+        print(f"viewport at: {self.map_layer.view_rect}")
+        print(f"Hero at: {self.hero.position}")
+        print(f"g={self.pymunk_space.gravity}")
+        print([f"{b} at {b.position} v={b.velocity}" for b in self.pymunk_space.bodies])
+        print([f"{s} at {s.center_of_gravity}" for s in self.pymunk_space.shapes])
 
     @property
     def visible_rect(self) -> pygame.Rect:
@@ -486,9 +612,7 @@ class QuestGame:
     def update(self, dt: int) -> None:
         self.invisible.update(dt, self)
         self.layered_draw_group.update(dt, self)
-        if self.hero.feet.collidelist(self.wall_rects) >= 0:
-            self.hero.move_back()
-        # print(self.hero.feet, self.world_rect)
+        self.pymunk_space.step(1.0 / 60.0)
         for ent in self.world_escaping:
             assert isinstance(ent, AnimatedEntity)
             if not self.world_rect.contains(ent.feet):
